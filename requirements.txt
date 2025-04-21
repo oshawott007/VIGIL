@@ -24,7 +24,7 @@
 
    jsonschema-specifications==2024.10.1
 
-   matplotlib>=3.0
+   matplotlib==3.10.1
 
    markupsafe==3.0.2
 
