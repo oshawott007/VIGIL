@@ -36,6 +36,8 @@ numpy>=1.21.0      # Required by matplotlib
 packaging==21.0 # Matches Streamlit's requirements
 
 
+
+--only-binary=:all:
 streamlit==1.25.0
-pillow==9.5.0  # Last version before 10.x that satisfies all requirements
+pillow==9.5.0
 matplotlib==3.7.1
