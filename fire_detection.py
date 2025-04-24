@@ -13,6 +13,18 @@ import json
 import os
 from config import BOT_TOKEN, CHAT_DATA_FILE
 
+
+from torch.serialization import add_safe_globals
+from ultralytics.nn.tasks import DetectionModel
+
+# Option 1: Using context manager
+with add_safe_globals([DetectionModel]):
+    model = YOLO('best.pt')  # Your model path
+
+# Option 2: Permanently allow (add at startup)
+add_safe_globals([DetectionModel])
+model = YOLO('best.pt')
+ classnames = ['fire', 'smoke']
 # Initialize the bot
 bot = Bot(token=BOT_TOKEN)
 
@@ -43,12 +55,12 @@ if not os.path.exists(CHAT_DATA_FILE) or os.path.getsize(CHAT_DATA_FILE) == 0:
         json.dump(chat_data, f)
 
 # Load the YOLO model for fire detection
-try:
-    fire_model = YOLO('best.pt')
-    classnames = ['fire', 'smoke']
-except Exception as e:
-    st.error(f"Failed to load fire detection YOLO model: {e}")
-    fire_model = None
+# try:
+#     fire_model = YOLO('best.pt')
+#     classnames = ['fire', 'smoke']
+# except Exception as e:
+#     st.error(f"Failed to load fire detection YOLO model: {e}")
+#     fire_model = None
 
 async def send_snapshot(frame, chat_id, name):
     """Send a snapshot to Telegram"""
