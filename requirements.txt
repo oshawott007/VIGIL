@@ -44,4 +44,5 @@ streamlit==1.28.0
 pillow==10.3.0  # Version compatible with newer Streamlit
 matplotlib==3.8.0
 
+python-telegram-bot==20.3  # Stable version
 opencv-python-headless==4.9.0.80
