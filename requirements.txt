@@ -35,4 +35,4 @@ watchdog==6.0.0
 matplotlib==3.7.1  # Pin a specific version
 streamlit==1.25.0
 numpy>=1.21.0      # Required by matplotlib
-packaging==25.0  # Matches Streamlit's requirements
+packaging==24.2  # Matches Streamlit's requirements
