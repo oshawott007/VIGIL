@@ -14,7 +14,7 @@ jsonschema-specifications==2024.10.1
 markupsafe==3.0.2
 narwhals==1.35.0
 pandas==2.2.3
-protobuf==5.29.4
+protobuf==3.20
 pyarrow==19.0.1
 pydeck==0.9.1
 python-dateutil==2.9.0.post0
