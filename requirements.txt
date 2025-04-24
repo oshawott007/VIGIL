@@ -14,7 +14,6 @@ jsonschema-specifications==2024.10.1
 markupsafe==3.0.2
 narwhals==1.35.0
 pandas==2.2.3
-pillow==11.2.1
 protobuf==5.29.4
 pyarrow==19.0.1
 pydeck==0.9.1
@@ -32,7 +31,11 @@ typing-extensions==4.13.2
 tzdata==2025.2
 urllib3==2.4.0
 watchdog==6.0.0
-matplotlib==3.7.1  # Pin a specific version
-streamlit==1.25.0
+
 numpy>=1.21.0      # Required by matplotlib
 packaging==21.0 # Matches Streamlit's requirements
+
+
+streamlit==1.25.0
+pillow==9.5.0  # Last version before 10.x that satisfies all requirements
+matplotlib==3.7.1
