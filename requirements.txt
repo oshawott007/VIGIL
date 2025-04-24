@@ -36,8 +36,10 @@ numpy>=1.21.0      # Required by matplotlib
 packaging==21.0 # Matches Streamlit's requirements
 
 
+# First upgrade pip
+pip>=25.0.1
 
---only-binary=:all:
-streamlit==1.25.0
-pillow==9.4.0
-matplotlib==3.7.1
+# Core packages
+streamlit==1.28.0
+pillow==10.3.0  # Version compatible with newer Streamlit
+matplotlib==3.8.0
