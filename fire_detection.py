@@ -24,7 +24,7 @@ with add_safe_globals([DetectionModel]):
 # Option 2: Permanently allow (add at startup)
 add_safe_globals([DetectionModel])
 model = YOLO('best.pt')
- classnames = ['fire', 'smoke']
+classnames = ['fire', 'smoke']
 # Initialize the bot
 bot = Bot(token=BOT_TOKEN)
 
