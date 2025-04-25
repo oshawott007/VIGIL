@@ -18,12 +18,7 @@ from torch.serialization import add_safe_globals
 from ultralytics.nn.tasks import DetectionModel
 
 # Option 1: Using context manager
-with add_safe_globals([DetectionModel]):
-    model = YOLO('best.pt')  # Your model path
-
-# Option 2: Permanently allow (add at startup)
-add_safe_globals([DetectionModel])
-model = YOLO('best.pt')
+model = YOLO('best.pt')  # Your model path
 classnames = ['fire', 'smoke']
 # Initialize the bot
 bot = Bot(token=BOT_TOKEN)
