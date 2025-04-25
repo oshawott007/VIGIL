@@ -18,7 +18,14 @@ from torch.serialization import add_safe_globals
 from ultralytics.nn.tasks import DetectionModel
 
 # Option 1: Using context manager
-model = YOLO('best.pt')  # Your model path
+
+@st.cache_resource  # Cache the model to avoid reloads
+def load_model():
+    model = YOLO('best.pt')  # Use quantized/pruned model if possible
+    return model.half() if torch.cuda.is_available() else model  # Use half-precision on GPU
+
+model = load_model()
+# model = YOLO('best.pt')  # Your model path
 classnames = ['fire', 'smoke']
 # Initialize the bot
 bot = Bot(token=BOT_TOKEN)
