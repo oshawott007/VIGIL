@@ -19,10 +19,11 @@ from ultralytics.nn.tasks import DetectionModel
 
 # Option 1: Using context manager
 
-@st.cache_resource  # Cache the model to avoid reloads
+@st.cache_resource
 def load_model():
-    model = YOLO('best.pt')  # Use quantized/pruned model if possible
-    return model.half() if torch.cuda.is_available() else model  # Use half-precision on GPU
+    # Use ONNX if available, otherwise PT
+    model = YOLO("best.pt")  # or "best.pt"
+    return model
 
 model = load_model()
 # model = YOLO('best.pt')  # Your model path
