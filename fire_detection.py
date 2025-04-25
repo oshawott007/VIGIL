@@ -14,8 +14,7 @@ import os
 from config import BOT_TOKEN, CHAT_DATA_FILE
 
 
-from torch.serialization import add_safe_globals
-from ultralytics.nn.tasks import DetectionModel
+
 
 # Option 1: Using context manager
 
