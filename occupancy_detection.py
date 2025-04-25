@@ -31,16 +31,25 @@ if occupancy_collection is None:
     st.stop()
 
 # Load occupancy detection model
+# @st.cache_resource
+# def load_model():
+#     try:
+#         model = YOLO('yolov8n.pt')  # Use yolov8n.pt for person detection
+#         logger.info("Occupancy detection model loaded successfully")
+#         return model
+#     except Exception as e:
+#         logger.error(f"Failed to load occupancy detection model: {e}")
+#         st.error(f"Failed to load occupancy detection model: {e}")
+#         return None
 @st.cache_resource
 def load_model():
     try:
-        model = YOLO('yolov8n.pt')  # Use yolov8n.pt for person detection
-        logger.info("Occupancy detection model loaded successfully")
+        # Method 1: Use YOLO's native loader (recommended)
+        model = YOLO('yolo8n.pt')
         return model
     except Exception as e:
-        logger.error(f"Failed to load occupancy detection model: {e}")
-        st.error(f"Failed to load occupancy detection model: {e}")
-        return None
+        st.error(f"Model loading failed: {str(e)}")
+        st.stop()
 
 occ_model = load_model()
 if occ_model is None:
