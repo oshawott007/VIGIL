@@ -13,19 +13,6 @@ import json
 import os
 from config import BOT_TOKEN, CHAT_DATA_FILE
 
-
-
-
-# Option 1: Using context manager
-
-
-    # Use ONNX if available, otherwise PT
-# model = YOLO("best.pt")  # or "best.pt"
-
-model = YOLO('https://github.com/ultralytics/assets/releases/download/v8.1.0/yolov8n.pt')
-# model = load_model()
-# model = YOLO('best.pt')  # Your model path
-classnames = ['fire', 'smoke']
 # Initialize the bot
 bot = Bot(token=BOT_TOKEN)
 
@@ -56,12 +43,12 @@ if not os.path.exists(CHAT_DATA_FILE) or os.path.getsize(CHAT_DATA_FILE) == 0:
         json.dump(chat_data, f)
 
 # Load the YOLO model for fire detection
-# try:
-#     fire_model = YOLO('best.pt')
-#     classnames = ['fire', 'smoke']
-# except Exception as e:
-#     st.error(f"Failed to load fire detection YOLO model: {e}")
-#     fire_model = None
+try:
+    fire_model = YOLO('best.pt')
+    classnames = ['fire', 'smoke']
+except Exception as e:
+    st.error(f"Failed to load fire detection YOLO model: {e}")
+    fire_model = None
 
 async def send_snapshot(frame, chat_id, name):
     """Send a snapshot to Telegram"""
