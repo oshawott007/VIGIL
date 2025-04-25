@@ -45,7 +45,7 @@ if occupancy_collection is None:
 def load_model():
     try:
         # Method 1: Use YOLO's native loader (recommended)
-        model = YOLO('yolo8n.pt')
+        model = YOLO('yolov8n.pt')
         return model
     except Exception as e:
         st.error(f"Model loading failed: {str(e)}")
