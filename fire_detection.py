@@ -18,13 +18,12 @@ from config import BOT_TOKEN, CHAT_DATA_FILE
 
 # Option 1: Using context manager
 
-@st.cache_resource
-def load_model():
-    # Use ONNX if available, otherwise PT
-    model = YOLO("best.pt")  # or "best.pt"
-    return model
 
-model = load_model()
+    # Use ONNX if available, otherwise PT
+model = YOLO("best.pt")  # or "best.pt"
+
+
+# model = load_model()
 # model = YOLO('best.pt')  # Your model path
 classnames = ['fire', 'smoke']
 # Initialize the bot
