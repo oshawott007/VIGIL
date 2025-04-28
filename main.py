@@ -4,26 +4,43 @@ from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from bson.objectid import ObjectId
 
-# MongoDB Connection Setup
+# MongoDB Setup and Schema Management
 @st.cache_resource
-def init_mongo_connection():
+def init_mongodb():
+    """Initialize MongoDB connection and ensure schema exists"""
     try:
         client = MongoClient(st.secrets["mongodb"]["uri"])
         db = client[st.secrets["mongodb"]["dbname"]]
-        # Create index on camera name to ensure uniqueness
-        db.cameras.create_index("name", unique=True)
+        
+        # Create collections if they don't exist
+        collections = db.list_collection_names()
+        
+        # Cameras collection schema
+        if "cameras" not in collections:
+            db.create_collection("cameras")
+            db.cameras.create_index("name", unique=True)
+            db.cameras.create_index("address")
+        
+        # Detection events collections
+        for collection in ["fire_events", "occupancy_events", "tailgating_events", "no_access_events"]:
+            if collection not in collections:
+                db.create_collection(collection)
+                db[collection].create_index("camera_id")
+                db[collection].create_index("timestamp")
+        
         return db
-    except Exception as e:
-        st.error(f"Failed to connect to MongoDB: {str(e)}")
+    except PyMongoError as e:
+        st.error(f"Database connection failed: {str(e)}")
         return None
 
-# Initialize MongoDB connection
-db = init_mongo_connection()
+# Initialize MongoDB
+db = init_mongodb()
 
 # Camera Management Functions
-def add_camera_to_db(name, address):
+def add_camera(name, address):
     """Add a camera to MongoDB with validation"""
     if not db:
         st.error("Database connection not available")
@@ -34,53 +51,86 @@ def add_camera_to_db(name, address):
         return False
     
     try:
-        db.cameras.insert_one({
-            "name": name,
-            "address": address,
+        result = db.cameras.insert_one({
+            "name": name.strip(),
+            "address": address.strip(),
             "created_at": datetime.now(),
-            "updated_at": datetime.now()
+            "updated_at": datetime.now(),
+            "is_active": True
         })
+        st.session_state.cameras = get_all_cameras()
+        st.success(f"Camera '{name}' added successfully!")
         return True
-    except Exception as e:
+    except PyMongoError as e:
         if "duplicate key error" in str(e):
             st.warning(f"Camera '{name}' already exists")
         else:
             st.error(f"Error adding camera: {str(e)}")
         return False
 
-def remove_camera_from_db(camera_id):
-    """Remove a camera from MongoDB"""
+def remove_camera(camera_id):
+    """Mark camera as inactive (soft delete)"""
     if not db:
         st.error("Database connection not available")
         return False
     
     try:
-        result = db.cameras.delete_one({"_id": ObjectId(camera_id)})
-        return result.deleted_count > 0
-    except Exception as e:
+        result = db.cameras.update_one(
+            {"_id": ObjectId(camera_id)},
+            {"$set": {"is_active": False, "updated_at": datetime.now()}}
+        )
+        if result.modified_count > 0:
+            st.session_state.cameras = get_all_cameras()
+            return True
+        return False
+    except PyMongoError as e:
         st.error(f"Error removing camera: {str(e)}")
         return False
 
-def get_all_cameras_from_db():
-    """Retrieve all cameras from MongoDB"""
+def get_all_cameras():
+    """Retrieve all active cameras"""
     if not db:
-        st.error("Database connection not available")
         return []
-    
     try:
-        return list(db.cameras.find().sort("created_at", -1))
-    except Exception as e:
+        return list(db.cameras.find({"is_active": True}))
+    except PyMongoError as e:
         st.error(f"Error fetching cameras: {str(e)}")
         return []
 
-# Initialize session state with DB data
-if 'cameras' not in st.session_state:
-    st.session_state.cameras = get_all_cameras_from_db()
+def get_camera_by_id(camera_id):
+    """Get single camera by ID"""
+    if not db:
+        return None
+    try:
+        return db.cameras.find_one({"_id": ObjectId(camera_id)})
+    except PyMongoError as e:
+        st.error(f"Error fetching camera: {str(e)}")
+        return None
 
-# [Rest of your session state initialization remains the same...]
+# Initialize session state
+if 'cameras' not in st.session_state:
+    st.session_state.cameras = get_all_cameras()
+if 'confirm_remove' not in st.session_state:
+    st.session_state.confirm_remove = None
+if 'processing_active' not in st.session_state:
+    st.session_state.processing_active = False
+if 'fire_selected_cameras' not in st.session_state:
+    st.session_state.fire_selected_cameras = []
+if 'occ_selected_cameras' not in st.session_state:
+    st.session_state.occ_selected_cameras = []
+if 'fire_detection_active' not in st.session_state:
+    st.session_state.fire_detection_active = False
+if 'telegram_status' not in st.session_state:
+    st.session_state.telegram_status = []
+if 'occ_detection_active' not in st.session_state:
+    st.session_state.occ_detection_active = False
+if 'no_access_selected_cameras' not in st.session_state:
+    st.session_state.no_access_selected_cameras = []
+if 'no_access_detection_active' not in st.session_state:
+    st.session_state.no_access_detection_active = False
 
 # App UI
-st.title("📷 V.I.G.I.L - Persistent Camera Management")
+st.title("📷 V.I.G.I.L - Persistent Surveillance System")
 
 # Create tabs
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -94,51 +144,67 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 
 with tab1:
     st.header("📹 Camera Management")
+    st.write("Manage cameras that persist across sessions")
     
     # Add Camera Form
     with st.expander("➕ Add New Camera", expanded=True):
-        with st.form("add_camera_form", clear_on_submit=True):
-            name = st.text_input("Camera Name*", help="Unique identifier for the camera")
-            address = st.text_input("Camera Address*", help="RTSP/HTTP stream URL or IP address")
+        with st.form("add_camera_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                name = st.text_input("Camera Name*", help="Unique identifier for the camera")
+            with col2:
+                address = st.text_input("Camera Address*", help="RTSP/HTTP stream URL")
+            
             notes = st.text_area("Additional Notes", help="Optional description or location details")
             
             if st.form_submit_button("Add Camera"):
                 if name and address:
-                    if add_camera_to_db(name, address):
-                        st.success(f"Camera '{name}' added successfully!")
-                        # Update session state
-                        st.session_state.cameras = get_all_cameras_from_db()
+                    success = add_camera(name, address)
+                    if success:
                         st.rerun()
                 else:
                     st.warning("Please fill all required fields (*)")
     
     # Camera List
-    st.header("📋 Configured Cameras")
+    st.header("📋 Registered Cameras")
     
     if not st.session_state.cameras:
         st.info("No cameras found. Add your first camera above.")
     else:
-        for i, cam in enumerate(st.session_state.cameras):
-            with st.container(border=True):
+        for cam in st.session_state.cameras:
+            with st.container():
                 col1, col2, col3 = st.columns([3, 5, 2])
                 with col1:
                     st.subheader(cam["name"])
-                    st.caption(f"Added: {cam['created_at'].strftime('%Y-%m-%d')}")
+                    st.caption(f"Added: {cam['created_at'].strftime('%Y-%m-%d %H:%M')}")
                 with col2:
                     st.code(cam["address"])
                     if "notes" in cam and cam["notes"]:
-                        st.markdown(f"*{cam['notes']}*")
+                        st.caption(cam["notes"])
                 with col3:
-                    if st.button("❌ Remove", key=f"remove_{i}"):
-                        if remove_camera_from_db(str(cam["_id"])):
-                            st.success(f"Camera '{cam['name']}' removed!")
-                            st.session_state.cameras = get_all_cameras_from_db()
+                    if st.button("Remove", key=f"remove_{cam['_id']}"):
+                        st.session_state.confirm_remove = str(cam["_id"])
+        
+        # Removal Confirmation Dialog
+        if st.session_state.confirm_remove:
+            cam = get_camera_by_id(st.session_state.confirm_remove)
+            if cam:
+                st.warning("🚨 Confirm Camera Removal")
+                st.markdown(f"""
+                - **Name**: {cam['name']}
+                - **Address**: `{cam['address']}`
+                - **Added On**: {cam['created_at'].strftime('%Y-%m-%d %H:%M')}
+                """)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Confirm Removal"):
+                        if remove_camera(st.session_state.confirm_remove):
+                            st.session_state.confirm_remove = None
                             st.rerun()
-                        else:
-                            st.error("Failed to remove camera")
-
-# [Rest of your tabs (tab2-tab6) remain unchanged...]
-
+                with col2:
+                    if st.button("❎ Cancel"):
+                        st.session_state.confirm_remove = None
 # ... (Previous code in main.py remains unchanged until tab2)
 
 with tab2:
