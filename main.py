@@ -15,7 +15,7 @@ import urllib.parse
 from pymongo import MongoClient
 
 # MongoDB Atlas connection
-MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
  # Replace with your MongoDB Atlas URI
 try:
     # URL-encode username and password for safety
