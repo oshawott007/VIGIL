@@ -4,50 +4,87 @@ from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
-from pymongo.errors import ServerSelectionTimeoutError, ConnectionError
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionError, ConfigurationError
 from bson import ObjectId
+import time
+import logging
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 
-# MongoDB Atlas connection
-MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
-try:
-    client = MongoClient(
-        MONGO_URI,
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=30000,
-        socketTimeoutMS=30000
-    )
-    # Test connection
-    client.admin.command('ping')
-    db = client['vigil_db']
-    cameras_collection = db['cameras']
-    fire_settings_collection = db['fire_settings']
-    occupancy_settings_collection = db['occupancy_settings']
-    tailgating_settings_collection = db['tailgating_settings']
-    no_access_settings_collection = db['no_access_settings']
-    st.success("Connected to MongoDB Atlas successfully!")
-except (ServerSelectionTimeoutError, ConnectionError) as e:
-    st.error(f"Failed to connect to MongoDB Atlas: {str(e)}")
+# MongoDB Atlas connection
+# Use standard URI instead of mongodb+srv to avoid DNS issues
+MONGO_URI = "mongodb://infernapeamber:g9kASflhhSQ26GMF@ac-k9l3ksx-shard-00-00.mjoloub.mongodb.net:27017,ac-k9l3ksx-shard-00-01.mjoloub.mongodb.net:27017,ac-k9l3ksx-shard-00-02.mjoloub.mongodb.net:27017/vigil_db?ssl=true&replicaSet=atlas-13vpt7 FEC-shard-0&authSource=admin&retryWrites=true&w=majority"
+
+client = None
+db = None
+cameras_collection = None
+fire_settings_collection = None
+occupancy_settings_collection = None
+tailgating_settings_collection = None
+no_access_settings_collection = None
+
+def connect_to_mongodb(retries=3, delay=2):
+    """Attempt to connect to MongoDB Atlas with retries."""
+    global client, db, cameras_collection, fire_settings_collection
+    global occupancy_settings_collection, tailgating_settings_collection, no_access_settings_collection
+    
+    for attempt in range(retries):
+        try:
+            logger.debug(f"Attempting MongoDB connection (attempt {attempt + 1}/{retries})")
+            client = MongoClient(
+                MONGO_URI,
+                serverSelectionTimeoutMS=5000,
+                connectTimeoutMS=30000,
+                socketTimeoutMS=30000,
+                ssl=True
+            )
+            # Test connection
+            client.admin.command('ping')
+            db = client['vigil_db']
+            cameras_collection = db['cameras']
+            fire_settings_collection = db['fire_settings']
+            occupancy_settings_collection = db['occupancy_settings']
+            tailgating_settings_collection = db['tailgating_settings']
+            no_access_settings_collection = db['no_access_settings']
+            st.success("Connected to MongoDB Atlas successfully!")
+            logger.debug("MongoDB connection successful")
+            return True
+        except (ServerSelectionTimeoutError, ConnectionError, ConfigurationError) as e:
+            logger.error(f"Connection attempt {attempt + 1} failed: {str(e)}")
+            if attempt < retries - 1:
+                st.warning(f"Connection attempt {attempt + 1} failed. Retrying in {delay} seconds...")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}")
+            break
+    
+    st.error("Failed to connect to MongoDB Atlas after multiple attempts.")
     st.write("**Troubleshooting Steps**:")
-    st.write("1. Verify MongoDB Atlas URI (username: infernapeamber, password: g9kASflhhSQ26GMF).")
-    st.write("2. Set Network Access to 0.0.0.0/0 in MongoDB Atlas for testing.")
-    st.write("3. Ensure pymongo>=4.8.0 is in requirements.txt.")
-    st.write("4. Check cluster status (not paused) in MongoDB Atlas.")
-    st.write("5. Run locally to isolate cloud-specific issues.")
-    client = None
-except Exception as e:
-    st.error(f"Unexpected error connecting to MongoDB Atlas: {str(e)}")
-    client = None
+    st.write("1. **Verify URI**: Ensure username (infernapeamber) and password (g9kASflhhSQ26GMF) are correct. Check MongoDB Atlas Connect > Drivers for the standard URI.")
+    st.write("2. **Network Access**: In MongoDB Atlas, set Network Access to 0.0.0.0/0 (allow all) for testing.")
+    st.write("3. **Dependencies**: Ensure pymongo>=4.8.0 and dnspython>=2.4.2 are in requirements.txt.")
+    st.write("4. **Cluster Status**: Verify Cluster0 is running (not paused) in MongoDB Atlas.")
+    st.write("5. **Test Locally**: Run locally to isolate Streamlit Cloud issues.")
+    st.write("6. **Standard URI**: If mongodb+srv fails, use the standard URI from Atlas Connect > Drivers.")
+    st.write("7. **Logs**: Check Streamlit Cloud logs or local terminal for detailed errors.")
+    logger.error("MongoDB connection failed after all retries")
+    return False
+
+# Attempt MongoDB connection
+connect_to_mongodb()
 
 # Database Operations
 def add_camera_to_db(name, address):
     """Add a camera to MongoDB."""
     if client is None:
-        st.error("MongoDB not connected. Cannot add camera.")
-        return None
+        st.error("MongoDB not connected. Using in-memory storage.")
+        return {"name": name, "address": address, "_id": str(len(st.session_state.cameras))}
     camera = {"name": name, "address": address}
     cameras_collection.insert_one(camera)
     return camera
@@ -55,20 +92,20 @@ def add_camera_to_db(name, address):
 def get_cameras_from_db():
     """Retrieve all cameras from MongoDB."""
     if client is None:
-        return []
+        return st.session_state.get('cameras', [])
     return list(cameras_collection.find())
 
 def remove_camera_from_db(camera_id):
     """Remove a camera from MongoDB by its ID."""
     if client is None:
-        st.error("MongoDB not connected. Cannot remove camera.")
+        st.error("MongoDB not connected. Removing from in-memory storage.")
         return
     cameras_collection.delete_one({"_id": ObjectId(camera_id)})
 
 def save_selected_cameras(collection, selected_cameras):
     """Save selected cameras for a specific module."""
     if client is None:
-        st.error("MongoDB not connected. Cannot save camera selections.")
+        st.error("MongoDB not connected. Camera selections not saved.")
         return
     collection.replace_one({}, {"selected_cameras": selected_cameras}, upsert=True)
 
@@ -447,14 +484,14 @@ with tab4:
             video_placeholder = st.empty()
             table_placeholder = st.empty()
         
-            if st.session_state.tailgating_detection_active:
-                from tailgating import tailgating_model, tailgating_detection_loop
-                if tailgating_model is None:
-                    video_placeholder.error("Tailgating detection model not available")
-                else:
-                    selected_cams = [cam for cam in st.session_state.cameras 
-                                   if cam['name'] in st.session_state.tailgating_selected_cameras]
-                    asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
+        if st.session_state.tailgating_detection_active:
+            from tailgating import tailgating_model, tailgating_detection_loop
+            if tailgating_model is None:
+                video_placeholder.error("Tailgating detection model not available")
+            else:
+                selected_cams = [cam for cam in st.session_state.cameras 
+                               if cam['name'] in st.session_state.tailgating_selected_cameras]
+                asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
 with tab5:
     st.header("👜 Unattended Bags Detection")
@@ -526,11 +563,11 @@ with tab6:
             video_placeholder = st.empty()
             table_placeholder = st.empty()
         
-            if st.session_state.no_access_detection_active:
-                from no_access_rooms import no_access_model, no_access_detection_loop
-                if no_access_model is None:
-                    video_placeholder.error("No-access detection model not available")
-                else:
-                    selected_cams = [cam for cam in st.session_state.cameras 
-                                   if cam['name'] in st.session_state.no_access_selected_cameras]
-                    asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+        if st.session_state.no_access_detection_active:
+            from no_access_rooms import no_access_model, no_access_detection_loop
+            if no_access_model is None:
+                video_placeholder.error("No-access detection model not available")
+            else:
+                selected_cams = [cam for cam in st.session_state.cameras 
+                               if cam['name'] in st.session_state.no_access_selected_cameras]
+                asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
