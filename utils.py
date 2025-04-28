@@ -4,12 +4,12 @@ import cv2
 import numpy as np
 import time
 from pymongo import MongoClient
-
+from db import add_camera_to_db, get_cameras_from_db, remove_camera_from_db
 # MongoDB Atlas connection
-MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your actual MongoDB Atlas URI
-client = MongoClient(MONGODB_URI)
-db = client['vigil']  # Database name
-cameras_collection = db['cameras']  # Collection for cameras
+# MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"  # Replace with your actual MongoDB Atlas URI
+# client = MongoClient(MONGODB_URI)
+# db = client['vigil']  # Database name
+# cameras_collection = db['cameras']  # Collection for cameras
 
 def add_camera(name: str, address: str) -> None:
     """
