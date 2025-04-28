@@ -11,6 +11,40 @@ from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 
+
+MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+
+# Optional: Standard URI fallback if mongodb+srv fails
+# Example: mongodb://<username>:<password>@ac-4hozb1p-shard-00-00.mjoloub.mongodb.net:27017,...
+# MONGODB_URI = "your_standard_mongodb_uri_here"
+
+# Initialize MongoDB client
+try:
+    # URL-encode username and password for safety
+    parsed_uri = urllib.parse.urlparse(MONGODB_URI)
+    if parsed_uri.scheme == "mongodb+srv":
+        client = MongoClient(
+            MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000
+        )
+    else:
+        client = MongoClient(
+            MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            ssl=True
+        )
+    
+    # Test connection
+    client.admin.command('ping')
+    db = client['form_db']  # Database name
+    submissions_collection = db['submissions']  # Collection for form submissions
+    st.success("Connected to MongoDB Atlas successfully!")
+
+
 # MongoDB Setup and Schema Management
 @st.cache_resource
 def init_mongodb():
