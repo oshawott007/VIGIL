@@ -1,18 +1,84 @@
-# main.py
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
-from utils import add_camera, remove_camera
+from pymongo import MongoClient
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 
+# MongoDB Connection
+@st.cache_resource
+def get_mongo_client():
+    try:
+        client = MongoClient(st.secrets["mongodb"]["uri"])
+        return client
+    except Exception as e:
+        st.error(f"Failed to connect to MongoDB: {e}")
+        return None
+
+# Initialize MongoDB connection
+client = get_mongo_client()
+if client:
+    db = client[st.secrets["mongodb"]["dbname"]]
+    cameras_collection = db["cameras"]
+
+# Camera Management Functions
+def add_camera(name, address):
+    """Add a camera to MongoDB"""
+    if not client:
+        st.error("Database connection not available")
+        return
+    
+    if not name or not address:
+        st.warning("Please provide both name and address")
+        return
+    
+    try:
+        existing = cameras_collection.find_one({"name": name})
+        if existing:
+            st.warning(f"Camera '{name}' already exists")
+            return
+        
+        cameras_collection.insert_one({
+            "name": name,
+            "address": address,
+            "created_at": datetime.now()
+        })
+        st.success(f"Camera '{name}' added successfully!")
+        st.session_state.cameras = list(cameras_collection.find())
+    except Exception as e:
+        st.error(f"Error adding camera: {e}")
+
+def remove_camera(index):
+    """Remove a camera from MongoDB"""
+    if not client:
+        st.error("Database connection not available")
+        return
+    
+    try:
+        camera = st.session_state.cameras[index]
+        cameras_collection.delete_one({"_id": camera["_id"]})
+        st.session_state.cameras.pop(index)
+        st.session_state.confirm_remove = None
+        st.success(f"Camera '{camera['name']}' removed successfully!")
+    except Exception as e:
+        st.error(f"Error removing camera: {e}")
+
+def get_all_cameras():
+    """Retrieve all cameras from MongoDB"""
+    if not client:
+        return []
+    try:
+        return list(cameras_collection.find())
+    except Exception as e:
+        st.error(f"Error fetching cameras: {e}")
+        return []
 
 # Initialize session state
 if 'cameras' not in st.session_state:
-    st.session_state.cameras = []
+    st.session_state.cameras = get_all_cameras()
 if 'confirm_remove' not in st.session_state:
     st.session_state.confirm_remove = None
 if 'processing_active' not in st.session_state:
@@ -43,9 +109,13 @@ if 'no_access_selected_cameras' not in st.session_state:
     st.session_state.no_access_selected_cameras = []
 if 'no_access_detection_active' not in st.session_state:
     st.session_state.no_access_detection_active = False
+if 'tailgating_selected_cameras' not in st.session_state:
+    st.session_state.tailgating_selected_cameras = []
+if 'tailgating_detection_active' not in st.session_state:
+    st.session_state.tailgating_detection_active = False
 
 # App UI
-st.title("📷 V.I.G.I.L")
+st.title("📷 V.I.G.I.L - Advanced Surveillance System")
 
 # Create tabs
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -58,40 +128,51 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 
 with tab1:
-    with st.form("add_camera"):
-        name = st.text_input("Camera Name")
-        address = st.text_input("Camera Address")
-        if st.form_submit_button("➕ Add Camera"):
-            add_camera(name, address)
-
-    st.header("📋 Camera List")
+    st.header("📹 Camera Management")
+    st.write("Add, remove, and manage surveillance cameras")
+    
+    # Camera addition form
+    with st.expander("➕ Add New Camera", expanded=True):
+        with st.form("add_camera_form"):
+            name = st.text_input("Camera Name", key="camera_name")
+            address = st.text_input("Camera Address (RTSP/HTTP URL)", key="camera_address")
+            if st.form_submit_button("Add Camera"):
+                add_camera(name, address)
+                st.rerun()
+    
+    # Camera list and removal
+    st.header("📋 Camera Inventory")
     if not st.session_state.cameras:
-        st.info("No cameras added yet.")
+        st.info("No cameras configured yet. Add your first camera above.")
     else:
         for i, cam in enumerate(st.session_state.cameras):
             col1, col2, col3 = st.columns([4, 4, 2])
             with col1:
                 st.write(f"**{cam['name']}**")
             with col2:
-                st.write(cam['address'])
+                st.code(cam['address'])
             with col3:
                 if st.button("❌ Remove", key=f"remove_{i}"):
                     st.session_state.confirm_remove = i
+        
+        # Confirmation dialog
+        if st.session_state.confirm_remove is not None:
+            cam = st.session_state.cameras[st.session_state.confirm_remove]
+            st.warning("🚨 Confirm Camera Removal")
+            st.write(f"Camera Name: **{cam['name']}**")
+            st.write(f"Address: `{cam['address']}`")
+            st.write(f"Added on: {cam['created_at'].strftime('%Y-%m-%d %H:%M')}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Confirm Removal"):
+                    remove_camera(st.session_state.confirm_remove)
+                    st.rerun()
+            with col2:
+                if st.button("❎ Cancel"):
+                    st.session_state.confirm_remove = None
+                    st.rerun()
 
-    if st.session_state.confirm_remove is not None:
-        cam = st.session_state.cameras[st.session_state.confirm_remove]
-        st.warning("🚨 Confirm Removal")
-        st.write(f"Are you sure you want to remove camera **{cam['name']}**?")
-        st.write(f"Address: {cam['address']}")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✅ Yes, remove it"):
-                remove_camera(st.session_state.confirm_remove)
-                st.rerun()
-        with col2:
-            if st.button("❎ Cancel"):
-                st.session_state.confirm_remove = None
-                st.rerun()
 # In main.py, replace the tab2 section with this
 
 # ... (Previous code in main.py remains unchanged until tab2)
