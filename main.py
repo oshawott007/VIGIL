@@ -1,29 +1,14 @@
-# main.py
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
-from utils import add_camera, remove_camera
+from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionError
+from bson import ObjectId
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
-# from db import (
-#     add_camera_to_db,
-#     get_cameras_from_db,
-#     remove_camera_from_db,
-#     save_selected_cameras,
-#     get_selected_cameras,
-#     fire_settings_collection,
-#     occupancy_settings_collection,
-#     tailgating_settings_collection,
-#     no_access_settings_collection
-# )
-from bson import ObjectId
-
-from pymongo import MongoClient
-from pymongo.errors import ServerSelectionTimeoutError, ConnectionError
-import streamlit as st
 
 # MongoDB Atlas connection
 MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
@@ -47,16 +32,17 @@ try:
 except (ServerSelectionTimeoutError, ConnectionError) as e:
     st.error(f"Failed to connect to MongoDB Atlas: {str(e)}")
     st.write("**Troubleshooting Steps**:")
-    st.write("1. Verify MongoDB Atlas URI (username, password, cluster name).")
+    st.write("1. Verify MongoDB Atlas URI (username: infernapeamber, password: g9kASflhhSQ26GMF).")
     st.write("2. Set Network Access to 0.0.0.0/0 in MongoDB Atlas for testing.")
     st.write("3. Ensure pymongo>=4.8.0 is in requirements.txt.")
     st.write("4. Check cluster status (not paused) in MongoDB Atlas.")
     st.write("5. Run locally to isolate cloud-specific issues.")
-    client = None  # Fallback to avoid crashes
+    client = None
 except Exception as e:
     st.error(f"Unexpected error connecting to MongoDB Atlas: {str(e)}")
     client = None
 
+# Database Operations
 def add_camera_to_db(name, address):
     """Add a camera to MongoDB."""
     if client is None:
@@ -77,7 +63,6 @@ def remove_camera_from_db(camera_id):
     if client is None:
         st.error("MongoDB not connected. Cannot remove camera.")
         return
-    from bson import ObjectId
     cameras_collection.delete_one({"_id": ObjectId(camera_id)})
 
 def save_selected_cameras(collection, selected_cameras):
@@ -93,6 +78,29 @@ def get_selected_cameras(collection):
         return []
     doc = collection.find_one()
     return doc.get("selected_cameras", []) if doc else []
+
+# Utility Functions
+def add_camera(name, address):
+    """Add a camera to MongoDB and update session state."""
+    if not name or not address:
+        st.error("Camera name and address are required.")
+        return
+    if any(cam['name'] == name for cam in st.session_state.cameras):
+        st.error("Camera name must be unique.")
+        return
+    camera = add_camera_to_db(name, address)
+    if camera:
+        st.session_state.cameras.append(camera)
+        st.success(f"Added camera: {name}")
+
+def remove_camera(index):
+    """Remove a camera from MongoDB and update session state."""
+    if 0 <= index < len(st.session_state.cameras):
+        camera = st.session_state.cameras[index]
+        remove_camera_from_db(camera['_id'])
+        st.session_state.cameras.pop(index)
+        st.session_state.confirm_remove = None
+        st.success(f"Removed camera: {camera['name']}")
 
 # Initialize session state
 if 'cameras' not in st.session_state:
@@ -152,9 +160,8 @@ with tab1:
                 if any(cam['name'] == name for cam in st.session_state.cameras):
                     st.error("Camera name must be unique.")
                 else:
-                    add_camera_to_db(name, address)
+                    add_camera(name, address)
                     st.session_state.cameras = get_cameras_from_db()
-                    st.success(f"Added camera: {name}")
                     st.rerun()
             else:
                 st.error("Camera name and address are required.")
@@ -181,10 +188,8 @@ with tab1:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Yes, remove it"):
-                remove_camera_from_db(cam['_id'])
+                remove_camera(st.session_state.confirm_remove)
                 st.session_state.cameras = get_cameras_from_db()
-                st.session_state.confirm_remove = None
-                st.success(f"Removed camera: {cam['name']}")
                 st.rerun()
         with col2:
             if st.button("❎ Cancel"):
