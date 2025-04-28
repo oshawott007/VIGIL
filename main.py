@@ -141,7 +141,7 @@ with tab1:
         name = st.text_input("Camera Name")
         address = st.text_input("Camera Address")
         if st.form_submit_button("➕ Add Camera"):
-            add_camera(name, address)
+            add_camera_to_db(name, address)
             st.session_state.cameras = get_cameras_from_db()  # Refresh cameras
             st.rerun()
 
@@ -167,7 +167,7 @@ with tab1:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✅ Yes, remove it"):
-                remove_camera(st.session_state.confirm_remove)
+                remove_camera_from_db(st.session_state.confirm_remove)
                 st.session_state.cameras = get_cameras_from_db()  # Refresh cameras
                 st.rerun()
         with col2:
