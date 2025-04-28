@@ -60,103 +60,32 @@ except Exception as e:
 
 # MongoDB Setup and Schema Management
 @st.cache_resource
-def init_mongodb():
-    """Initialize MongoDB connection and ensure schema exists"""
-    try:
-        client = MongoClient(st.secrets["mongodb"]["uri"])
-        db = client[st.secrets["mongodb"]["dbname"]]
+# def init_mongodb():
+#     """Initialize MongoDB connection and ensure schema exists"""
+#     try:
+#         client = MongoClient(st.secrets["mongodb"]["uri"])
+#         db = client[st.secrets["mongodb"]["dbname"]]
         
-        # Create collections if they don't exist
-        collections = db.list_collection_names()
+#         # Create collections if they don't exist
+#         collections = db.list_collection_names()
         
-        # Cameras collection schema
-        if "cameras" not in collections:
-            db.create_collection("cameras")
-            db.cameras.create_index("name", unique=True)
-            db.cameras.create_index("address")
+#         # Cameras collection schema
+#         if "cameras" not in collections:
+#             db.create_collection("cameras")
+#             db.cameras.create_index("name", unique=True)
+#             db.cameras.create_index("address")
         
-        # Detection events collections
-        for collection in ["fire_events", "occupancy_events", "tailgating_events", "no_access_events"]:
-            if collection not in collections:
-                db.create_collection(collection)
-                db[collection].create_index("camera_id")
-                db[collection].create_index("timestamp")
+#         # Detection events collections
+#         for collection in ["fire_events", "occupancy_events", "tailgating_events", "no_access_events"]:
+#             if collection not in collections:
+#                 db.create_collection(collection)
+#                 db[collection].create_index("camera_id")
+#                 db[collection].create_index("timestamp")
         
-        return db
-    except PyMongoError as e:
-        st.error(f"Database connection failed: {str(e)}")
-        return None
-
-# Initialize MongoDB
-db = init_mongodb()
-
-# Camera Management Functions
-def add_camera(name, address):
-    """Add a camera to MongoDB with validation"""
-    if not db:
-        st.error("Database connection not available")
-        return False
-    
-    if not name or not address:
-        st.warning("Please provide both name and address")
-        return False
-    
-    try:
-        result = db.cameras.insert_one({
-            "name": name.strip(),
-            "address": address.strip(),
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-            "is_active": True
-        })
-        st.session_state.cameras = get_all_cameras()
-        st.success(f"Camera '{name}' added successfully!")
-        return True
-    except PyMongoError as e:
-        if "duplicate key error" in str(e):
-            st.warning(f"Camera '{name}' already exists")
-        else:
-            st.error(f"Error adding camera: {str(e)}")
-        return False
-
-def remove_camera(camera_id):
-    """Mark camera as inactive (soft delete)"""
-    if not db:
-        st.error("Database connection not available")
-        return False
-    
-    try:
-        result = db.cameras.update_one(
-            {"_id": ObjectId(camera_id)},
-            {"$set": {"is_active": False, "updated_at": datetime.now()}}
-        )
-        if result.modified_count > 0:
-            st.session_state.cameras = get_all_cameras()
-            return True
-        return False
-    except PyMongoError as e:
-        st.error(f"Error removing camera: {str(e)}")
-        return False
-
-def get_all_cameras():
-    """Retrieve all active cameras"""
-    if not db:
-        return []
-    try:
-        return list(db.cameras.find({"is_active": True}))
-    except PyMongoError as e:
-        st.error(f"Error fetching cameras: {str(e)}")
-        return []
-
-def get_camera_by_id(camera_id):
-    """Get single camera by ID"""
-    if not db:
-        return None
-    try:
-        return db.cameras.find_one({"_id": ObjectId(camera_id)})
-    except PyMongoError as e:
-        st.error(f"Error fetching camera: {str(e)}")
-        return None
+#         return db
+#     except PyMongoError as e:
+#         st.error(f"Database connection failed: {str(e)}")
+#
 
 # Initialize session state
 if 'cameras' not in st.session_state:
