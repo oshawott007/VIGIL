@@ -10,9 +10,10 @@ from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 # from db import get_cameras_from_db, save_selected_cameras, get_selected_cameras, \
 #     fire_settings_collection, occupancy_settings_collection, tailgating_settings_collection, no_access_settings_collection
+from pymongo import MongoClient
 import time
 import urllib.parse
-from pymongo import MongoClient
+
 
 # MongoDB Atlas connection
 MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
