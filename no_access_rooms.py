@@ -49,7 +49,7 @@ if no_access_collection is None:
 @st.cache_resource
 def load_model():
     try:
-        model = YOLO('yolov8n.pt')
+        model = YOLO('yolov8n.onnx')
         return model
     except Exception as e:
         st.error(f"Failed to load model. Error: {e}")
