@@ -32,19 +32,31 @@ if no_access_collection is None:
     st.stop()
 
 # Load human detection model
+# @st.cache_resource
+# def load_model():
+#     try:
+#         model = YOLO('yolov8n.pt')  # Replace with your custom human detection model path
+#         logger.info("Human detection model loaded successfully")
+#         return model
+#     except Exception as e:
+#         logger.error(f"Failed to load human detection model: {e}")
+#         st.error(f"Failed to load human detection model: {e}")
+#         return None
+
+# no_access_model = load_model()
+
+
 @st.cache_resource
 def load_model():
     try:
-        model = YOLO('yolov8n.pt')  # Replace with your custom human detection model path
-        logger.info("Human detection model loaded successfully")
+        model = YOLO('yolov8n.pt')
         return model
     except Exception as e:
-        logger.error(f"Failed to load human detection model: {e}")
-        st.error(f"Failed to load human detection model: {e}")
+        st.error(f"Failed to load model. Error: {e}")
         return None
 
-no_access_model = load_model()
-if no_access_model is None:
+model = load_model()
+if model is None:
     st.stop()
 
 # Function to save no-access event to MongoDB
