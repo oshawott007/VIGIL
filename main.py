@@ -1,122 +1,54 @@
+# main.py
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-from bson.objectid import ObjectId
 from utils import add_camera, remove_camera
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
-import time
-import urllib.parse
-
-
-
-MONGODB_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-
-# Optional: Standard URI fallback if mongodb+srv fails
-# Example: mongodb://<username>:<password>@ac-4hozb1p-shard-00-00.mjoloub.mongodb.net:27017,...
-# MONGODB_URI = "your_standard_mongodb_uri_here"
-
-# Initialize MongoDB client
-try:
-    # URL-encode username and password for safety
-    parsed_uri = urllib.parse.urlparse(MONGODB_URI)
-    if parsed_uri.scheme == "mongodb+srv":
-        client = MongoClient(
-            MONGODB_URI,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000
-        )
-    else:
-        client = MongoClient(
-            MONGODB_URI,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000,
-            ssl=True
-        )
-    
-    # Test connection
-    client.admin.command('ping')
-    db = client['form_db']  # Database name
-    submissions_collection = db['submissions']  # Collection for form submissions
-    st.success("Connected to MongoDB Atlas successfully!")
-except Exception as e:
-    st.error(f"Failed to connect to MongoDB Atlas: {str(e)}")
-    st.write("**Troubleshooting Steps**:")
-    st.write("1. **Verify MongoDB Atlas URI**: Ensure username, password, and cluster name are correct. URL-encode special characters in the password (e.g., @ → %40).")
-    st.write("2. **Network Access**: In MongoDB Atlas, set Network Access to 0.0.0.0/0 (allow all) for testing, especially for Streamlit Cloud.")
-    st.write("3. **TLS Support**: Ensure Python 3.9+ and pymongo 4.8.0+ are used. Check Streamlit Cloud settings.")
-    st.write("4. **Try Standard URI**: If mongodb+srv fails, use the standard URI from Atlas Connect > Drivers.")
-    st.write("5. **Cluster Status**: Verify the cluster is running in MongoDB Atlas (not paused).")
-    st.write("6. **Test Locally**: Run the app locally to isolate cloud-specific issues.")
-    st.stop()
-
-
-# MongoDB Setup and Schema Management
-@st.cache_resource
-# def init_mongodb():
-#     """Initialize MongoDB connection and ensure schema exists"""
-#     try:
-#         client = MongoClient(st.secrets["mongodb"]["uri"])
-#         db = client[st.secrets["mongodb"]["dbname"]]
-        
-#         # Create collections if they don't exist
-#         collections = db.list_collection_names()
-        
-#         # Cameras collection schema
-#         if "cameras" not in collections:
-#             db.create_collection("cameras")
-#             db.cameras.create_index("name", unique=True)
-#             db.cameras.create_index("address")
-        
-#         # Detection events collections
-#         for collection in ["fire_events", "occupancy_events", "tailgating_events", "no_access_events"]:
-#             if collection not in collections:
-#                 db.create_collection(collection)
-#                 db[collection].create_index("camera_id")
-#                 db[collection].create_index("timestamp")
-        
-#         return db
-#     except PyMongoError as e:
-#         st.error(f"Database connection failed: {str(e)}")
-#
+from db import get_cameras_from_db, save_selected_cameras, get_selected_cameras, \
+    fire_settings_collection, occupancy_settings_collection, tailgating_settings_collection, no_access_settings_collection
 
 # Initialize session state
 if 'cameras' not in st.session_state:
-    st.session_state.cameras = load_cameras()  # Load cameras from MongoDB
-if 'confirm_remove' not in st.session_state:
-    st.session_state.confirm_remove = None
-if 'processing_active' not in st.session_state:
-    st.session_state.processing_active = False
-if 'cameras' not in st.session_state:
-    st.session_state.cameras = get_all_cameras()
+    st.session_state.cameras = get_cameras_from_db()
 if 'confirm_remove' not in st.session_state:
     st.session_state.confirm_remove = None
 if 'processing_active' not in st.session_state:
     st.session_state.processing_active = False
 if 'fire_selected_cameras' not in st.session_state:
-    st.session_state.fire_selected_cameras = []
+    st.session_state.fire_selected_cameras = get_selected_cameras(fire_settings_collection)
 if 'occ_selected_cameras' not in st.session_state:
-    st.session_state.occ_selected_cameras = []
+    st.session_state.occ_selected_cameras = get_selected_cameras(occupancy_settings_collection)
+if 'tailgating_selected_cameras' not in st.session_state:
+    st.session_state.tailgating_selected_cameras = get_selected_cameras(tailgating_settings_collection)
+if 'no_access_selected_cameras' not in st.session_state:
+    st.session_state.no_access_selected_cameras = get_selected_cameras(no_access_settings_collection)
 if 'fire_detection_active' not in st.session_state:
     st.session_state.fire_detection_active = False
 if 'telegram_status' not in st.session_state:
     st.session_state.telegram_status = []
 if 'occ_detection_active' not in st.session_state:
     st.session_state.occ_detection_active = False
-if 'no_access_selected_cameras' not in st.session_state:
-    st.session_state.no_access_selected_cameras = []
+if 'occ_current_count' not in st.session_state:
+    st.session_state.occ_current_count = 0
+if 'occ_max_count' not in st.session_state:
+    st.session_state.occ_max_count = 0
+if 'occ_hourly_counts' not in st.session_state:
+    st.session_state.occ_hourly_counts = [0] * 24
+if 'occ_minute_counts' not in st.session_state:
+    st.session_state.occ_minute_counts = [0] * 1440
+if 'occ_last_update_hour' not in st.session_state:
+    st.session_state.occ_last_update_hour = datetime.now().hour
+if 'occ_last_update_minute' not in st.session_state:
+    st.session_state.occ_last_update_minute = -1
 if 'no_access_detection_active' not in st.session_state:
     st.session_state.no_access_detection_active = False
 
 # App UI
-st.title("📷 V.I.G.I.L - Persistent Surveillance System")
+st.title("📷 V.I.G.I.L")
 
 # Create tabs
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -134,7 +66,8 @@ with tab1:
         address = st.text_input("Camera Address")
         if st.form_submit_button("➕ Add Camera"):
             add_camera(name, address)
-            st.rerun()  # Rerun to refresh camera list
+            st.session_state.cameras = get_cameras_from_db()  # Refresh cameras
+            st.rerun()
 
     st.header("📋 Camera List")
     if not st.session_state.cameras:
@@ -146,7 +79,7 @@ with tab1:
                 st.write(f"**{cam['name']}**")
             with col2:
                 st.write(cam['address'])
-            with col3:
+            with col2:
                 if st.button("❌ Remove", key=f"remove_{i}"):
                     st.session_state.confirm_remove = i
 
@@ -159,12 +92,12 @@ with tab1:
         with col1:
             if st.button("✅ Yes, remove it"):
                 remove_camera(st.session_state.confirm_remove)
+                st.session_state.cameras = get_cameras_from_db()  # Refresh cameras
                 st.rerun()
         with col2:
             if st.button("❎ Cancel"):
                 st.session_state.confirm_remove = None
                 st.rerun()
-# ... (Previous code in main.py remains unchanged until tab2)
 
 with tab2:
     st.header("🔥 Fire and Smoke Detection")
@@ -201,10 +134,12 @@ with tab2:
         selected = st.multiselect(
             "Select cameras to monitor for fire/smoke",
             [cam['name'] for cam in st.session_state.cameras],
-            st.session_state.fire_selected_cameras,
+            default=st.session_state.fire_selected_cameras,
             key="fire_detection_cameras"
         )
-        st.session_state.fire_selected_cameras = selected
+        if selected != st.session_state.fire_selected_cameras:
+            st.session_state.fire_selected_cameras = selected
+            save_selected_cameras(fire_settings_collection, selected)
         
         if st.session_state.fire_selected_cameras:
             st.subheader("✅ Selected Cameras")
@@ -302,10 +237,12 @@ with tab3:
         selected = st.multiselect(
             "Select cameras for occupancy monitoring",
             [cam['name'] for cam in st.session_state.cameras],
-            st.session_state.occ_selected_cameras,
+            default=st.session_state.occ_selected_cameras,
             key="occupancy_cameras"
         )
-        st.session_state.occ_selected_cameras = selected
+        if selected != st.session_state.occ_selected_cameras:
+            st.session_state.occ_selected_cameras = selected
+            save_selected_cameras(occupancy_settings_collection, selected)
         
         if st.session_state.occ_selected_cameras:
             st.subheader("✅ Selected Cameras")
@@ -350,18 +287,10 @@ with tab3:
                     st.error(f"Occupancy detection failed: {e}")
                     st.session_state.occ_detection_active = False
 
-
 with tab4:
     st.header("🚪 Tailgating Detection")
     st.write("Detect unauthorized entry following authorized personnel.")
     
-    # Initialize session state for tailgating
-    if 'tailgating_selected_cameras' not in st.session_state:
-        st.session_state.tailgating_selected_cameras = []
-    if 'tailgating_detection_active' not in st.session_state:
-        st.session_state.tailgating_detection_active = False
-    
-    # Historical data view
     view_history = st.checkbox("View Historical Data", key="view_tailgating_history")
     
     if view_history:
@@ -388,10 +317,12 @@ with tab4:
         selected = st.multiselect(
             "Select cameras for tailgating detection",
             [cam['name'] for cam in st.session_state.cameras],
-            st.session_state.tailgating_selected_cameras,
+            default=st.session_state.tailgating_selected_cameras,
             key="tailgating_cameras"
         )
-        st.session_state.tailgating_selected_cameras = selected
+        if selected != st.session_state.tailgating_selected_cameras:
+            st.session_state.tailgating_selected_cameras = selected
+            save_selected_cameras(tailgating_settings_collection, selected)
         
         if st.session_state.tailgating_selected_cameras:
             st.subheader("✅ Selected Cameras")
@@ -428,8 +359,6 @@ with tab4:
                                    if cam['name'] in st.session_state.tailgating_selected_cameras]
                     asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
-# ... (Rest of main.py remains unchanged)
-
 with tab5:
     st.header("👜 Unattended Bags Detection")
     st.write("Identify and alert about unattended bags in monitored areas.")
@@ -438,12 +367,10 @@ with tab5:
     else:
         st.warning("Please add cameras first in the Camera Management tab")
 
-
 with tab6:
     st.header("🔒 No-Access Rooms Detection")
     st.write("Detect and log human presence in restricted areas.")
     
-    # Historical data view
     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
     
     if view_history:
@@ -466,13 +393,15 @@ with tab6:
         st.warning("Please add cameras first in the Camera Management tab")
     else:
         st.subheader("📋 Available Cameras")
-        selected = st.multiselect(
+        h selected = st.multiselect(
             "Select cameras for no-access room detection",
             [cam['name'] for cam in st.session_state.cameras],
-            st.session_state.no_access_selected_cameras,
+            default=st.session_state.no_access_selected_cameras,
             key="no_access_cameras"
         )
-        st.session_state.no_access_selected_cameras = selected
+        if selected != st.session_state.no_access_selected_cameras:
+            st.session_state.no_access_selected_cameras = selected
+            save_selected_cameras(no_access_settings_collection, selected)
         
         if st.session_state.no_access_selected_cameras:
             st.subheader("✅ Selected Cameras")
