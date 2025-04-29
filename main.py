@@ -275,7 +275,7 @@ with tab2:
         with col1:
             from fire_detection import fire_model
             if st.button("🔥 Start Fire Detection", 
-                        # disabled=not st.session_state.fire_selected_cameras or fire_model is None,
+                        disabled=not st.session_state.fire_selected_cameras or fire_model is None,
                         help="Start monitoring selected cameras for fire and smoke",
                         key="start_fire_detection"):
                 st.session_state.fire_detection_active = True
