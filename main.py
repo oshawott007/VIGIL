@@ -19,7 +19,7 @@ def keep_alive():
     while True:
         try:
             # Replace with your actual Streamlit Cloud URL
-            requests.get("https://your-app-name.streamlit.app/")  
+            requests.get("https://vigilpro.streamlit.app/")  
             time.sleep(900)  # Ping every 15 minutes (900 seconds)
         except:
             pass
