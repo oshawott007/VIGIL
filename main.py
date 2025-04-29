@@ -4,7 +4,7 @@ from datetime import datetime
 import asyncio
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
-from pymongo.errors import ServerSelectionTimeoutError, ConnectionError
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure  # Updated import
 from bson import ObjectId
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
@@ -29,7 +29,7 @@ try:
     tailgating_settings_collection = db['tailgating_settings']
     no_access_settings_collection = db['no_access_settings']
     st.success("Connected to MongoDB Atlas successfully!")
-except (ServerSelectionTimeoutError, ConnectionError) as e:
+except (ServerSelectionTimeoutError, ConnectionFailure) as e:  # Updated exception
     st.error(f"Failed to connect to MongoDB Atlas: {str(e)}")
     st.write("**Troubleshooting Steps**:")
     st.write("1. Verify MongoDB Atlas credentials")
@@ -40,6 +40,8 @@ except (ServerSelectionTimeoutError, ConnectionError) as e:
 except Exception as e:
     st.error(f"Unexpected error connecting to MongoDB Atlas: {str(e)}")
     client = None
+
+# [Rest of your code remains exactly the same...]
 
 # Database Operations
 def add_camera_to_db(name, address):
