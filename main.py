@@ -2,6 +2,9 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 import asyncio
+import requests 
+import time
+import threading
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure  # Updated import
@@ -9,6 +12,21 @@ from bson import ObjectId
 from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
+
+
+
+def keep_alive():
+    while True:
+        try:
+            # Replace with your actual Streamlit Cloud URL
+            requests.get("https://your-app-name.streamlit.app/")  
+            time.sleep(900)  # Ping every 15 minutes (900 seconds)
+        except:
+            pass
+
+# 2. Start the thread (daemon=True allows it to run in background)
+threading.Thread(target=keep_alive, daemon=True).start()
+
 
 # MongoDB Atlas connection
 MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
