@@ -11,7 +11,7 @@ from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 
 # MongoDB Atlas connection
-MONGO_URI = "mongodb+srv://infernapeamber:<db_password>@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 try:
     client = MongoClient(
