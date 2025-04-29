@@ -53,6 +53,6 @@ ultralytics==8.0.196
 --extra-index-url https://download.pytorch.org/whl/cpu
 rich==10.14.0
 
-onnxruntime==1.15.1
+onnxruntime==1.16.3   # Works with Python 3.10
 
 
