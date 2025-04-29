@@ -44,7 +44,7 @@ if not os.path.exists(CHAT_DATA_FILE) or os.path.getsize(CHAT_DATA_FILE) == 0:
 
 # Load the YOLO model for fire detection
 try:
-    fire_model = YOLO('best.pt')
+    fire_model = YOLO('best.onnx')
     classnames = ['fire', 'smoke']
 except Exception as e:
     st.error(f"Failed to load fire detection YOLO model: {e}")
