@@ -620,6 +620,6 @@ with tab6:
                     asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
 with tab7:
-    st.header("📹 Camera Management")
-    st.write("Add, remove, and manage surveillance cameras connected to the system.")
+    st.header("📹 Camera Hello this is a new camera system")
+    st.write("you definitely have the power to resolve this system with many more such things to do.")
     
