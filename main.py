@@ -525,7 +525,7 @@ with tab6:
                                     'timestamp': datetime.strptime(selected_event, '%Y-%m-%d %H:%M:%S')
                                 })
                                 if event_data and 'snapshot' in event_data:
-                                    snapshot = cv2.imdecode(np.frombuffer(event_data['snapshot'], cv2.IMREAD_COLOR)
+                                    snapshot = cv2.imdecode(np.frombuffer(event_data['snapshot'], cv2.IMREAD_COLOR))
                                     st.image(snapshot, channels="BGR", caption=f"Snapshot from {selected_event}")
                     else:
                         st.info(f"No no-access events recorded on {selected_date}")
