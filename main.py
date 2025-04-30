@@ -629,3 +629,8 @@ with tab6:
                     selected_cams = [cam for cam in st.session_state.cameras 
                                    if cam['name'] in st.session_state.no_access_selected_cameras]
                     asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+
+with tab7:
+    st.header("📹 Camera Management")
+    st.write("Add, remove, and manage surveillance cameras connected to the system.")
+    
