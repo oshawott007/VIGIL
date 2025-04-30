@@ -161,13 +161,14 @@ if 'no_access_detection_active' not in st.session_state:
 st.title("📷 V.I.G.I.L - Video Intelligence for General Identification and Logging")
 
 # Create tabs
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Camera Management", 
     "Fire Detection", 
     "Occupancy Dashboard", 
     "Tailgating", 
     "Unattended Bags",
-    "No-Access Rooms"
+    "No-Access Rooms",
+    "hello"
 ])
 
 with tab1:
