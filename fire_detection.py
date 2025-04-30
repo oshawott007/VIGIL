@@ -475,9 +475,9 @@ async def fire_detection_loop(video_placeholders, status_placeholder):
                         frames[cam_name],
                         channels="BGR",
                         caption=f"{cam_name}",
-                        use_container_width=True
+                        # use_container_width=True
                     )
-                    logger.debug(f"Displayed frame for {cam_name}")
+                    # logger.debug(f"Displayed frame for {cam_name}")
             except Exception as e:
                 logger.error(f"Error displaying frame for {cam_name}: {e}")
                 status_placeholder.error(f"Error displaying frame for {cam_name}: {e}")
