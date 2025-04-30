@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 
 # MongoDB connection
 @st.cache_resource
-def init_mongo():
-    try:
-        client = MongoClient('mongodb://localhost:27017/')  # Update with your MongoDB URI if needed
-        db = client['cctv_analysis']
-        collection = db['no_access_events']
-        logger.info("MongoDB connection established")
-        return collection
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
-        st.error(f"Failed to connect to MongoDB: {e}")
-        return None
+# def init_mongo():
+#     try:
+#         client = MongoClient('mongodb://localhost:27017/')  # Update with your MongoDB URI if needed
+#         db = client['cctv_analysis']
+#         collection = db['no_access_events']
+#         logger.info("MongoDB connection established")
+#         return collection
+#     except Exception as e:
+#         logger.error(f"Failed to connect to MongoDB: {e}")
+#         st.error(f"Failed to connect to MongoDB: {e}")
+#         return None
 
-no_access_collection = init_mongo()
-if no_access_collection is None:
-    st.stop()
+# no_access_collection = init_mongo()
+# if no_access_collection is None:
+#     st.stop()
 
 # Load human detection model
 # @st.cache_resource
