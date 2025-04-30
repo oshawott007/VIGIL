@@ -493,10 +493,7 @@ with tab5:
         data = load_tailgating_data()
         date_options = list(data.keys())
         selected_date = st.selectbox("Select Date", date_options, key="tailgating_date_select")
-    
         
-      
-
 with tab6:
     st.header("🔒 No-Access Rooms Detection")
     st.write("Detect and log human presence in restricted areas.")
