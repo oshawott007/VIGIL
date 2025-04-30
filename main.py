@@ -161,14 +161,12 @@ if 'no_access_detection_active' not in st.session_state:
 st.title("📷 V.I.G.I.LLL - Video Intelligence for General Identification and Logging")
 
 # Create tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Camera Management", 
     "Fire Detection", 
     "Occupancy Dashboard", 
     "Tailgating", 
-    "Unattended Bags",
-    "No-Access Rooms",
-    "hello"
+    "No-Access Rooms"
 ])
 
 with tab1:
@@ -480,13 +478,8 @@ with tab4:
                     selected_cams = [cam for cam in st.session_state.cameras 
                                    if cam['name'] in st.session_state.tailgating_selected_cameras]
                     asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
-
-with tab5:
-    st.header("👜 Unattended Bags Detection")
-    st.write("This feature is under development.")
-    st.info("Coming soon: Detect unattended bags in monitored areas.")
         
-with tab6:
+with tab5:
     st.header("🔒 No-Access Rooms Detection")
     st.write("Detect and log human presence in restricted areas.")
     
@@ -619,7 +612,4 @@ with tab6:
                                    if cam['name'] in st.session_state.no_access_selected_cameras]
                     asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
-with tab7:
-    st.header("📹 Camera Hello this is a new camera system")
-    st.write("you definitely have the power to resolve this system with many more such things to do.")
-    
+
