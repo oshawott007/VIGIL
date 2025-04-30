@@ -17,27 +17,27 @@ logger = logging.getLogger(__name__)
 
 # MongoDB connection
 @st.cache_resource
-def init_mongo():
-    try:
-        client = MongoClient('mongodb://localhost:27017/')  # Update with your MongoDB URI if needed
-        db = client['cctv_analysis']
-        collection = db['tailgating_events']
-        logger.info("MongoDB connection established")
-        return collection
-    except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
-        st.error(f"Failed to connect to MongoDB: {e}")
-        return None
+# def init_mongo():
+#     try:
+#         client = MongoClient('mongodb://localhost:27017/')  # Update with your MongoDB URI if needed
+#         db = client['cctv_analysis']
+#         collection = db['tailgating_events']
+#         logger.info("MongoDB connection established")
+#         return collection
+#     except Exception as e:
+#         logger.error(f"Failed to connect to MongoDB: {e}")
+#         st.error(f"Failed to connect to MongoDB: {e}")
+#         return None
 
-tailgating_collection = init_mongo()
-if tailgating_collection is None:
-    st.stop()
+# tailgating_collection = init_mongo()
+# if tailgating_collection is None:
+#     st.stop()
 
 # Load YOLOv8 model
 @st.cache_resource
 def load_model():
     try:
-        model = YOLO('yolov8n.pt')  # Replace with your custom model if needed
+        model = YOLO('yolov8n.onnx')  # Replace with your custom model if needed
         logger.info("YOLO model loaded successfully")
         return model
     except Exception as e:
