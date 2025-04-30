@@ -482,17 +482,9 @@ with tab4:
                     asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
 with tab5:
-    st.header("🚪 Tailgating Detection")
-    st.write("Detect unauthorized entry following authorized personnel.")
-    
-    view_history = st.checkbox("View Historical Data", key="view_tailgating_history")
-    
-    if view_history:
-        st.subheader("Historical Tailgating Events")
-        from tailgating import load_tailgating_data
-        data = load_tailgating_data()
-        date_options = list(data.keys())
-        selected_date = st.selectbox("Select Date", date_options, key="tailgating_date_select")
+    st.header("👜 Unattended Bags Detection")
+    st.write("This feature is under development.")
+    st.info("Coming soon: Detect unattended bags in monitored areas.")
         
 with tab6:
     st.header("🔒 No-Access Rooms Detection")
