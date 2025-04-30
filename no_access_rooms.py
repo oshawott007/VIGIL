@@ -8,92 +8,115 @@ import time
 import logging
 import asyncio
 from pymongo import MongoClient
+from typing import Dict, List
 
-# Set up logging
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# MongoDB connection
+# MongoDB connection setup
 @st.cache_resource
-# def init_mongo():
-#     try:
-#         client = MongoClient('mongodb://localhost:27017/')  # Update with your MongoDB URI if needed
-#         db = client['cctv_analysis']
-#         collection = db['no_access_events']
-#         logger.info("MongoDB connection established")
-#         return collection
-#     except Exception as e:
-#         logger.error(f"Failed to connect to MongoDB: {e}")
-#         st.error(f"Failed to connect to MongoDB: {e}")
-#         return None
+def init_mongo_connection():
+    try:
+        # Replace with your MongoDB Atlas connection string
+        client = MongoClient("mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+        db = client["vigil"]
+        return db.no_access_events
+    except Exception as e:
+        logger.error(f"Failed to connect to MongoDB: {e}")
+        return None
 
-# no_access_collection = init_mongo()
-# if no_access_collection is None:
-#     st.stop()
-
-# Load human detection model
-# @st.cache_resource
-# def load_model():
-#     try:
-#         model = YOLO('yolov8n.pt')  # Replace with your custom human detection model path
-#         logger.info("Human detection model loaded successfully")
-#         return model
-#     except Exception as e:
-#         logger.error(f"Failed to load human detection model: {e}")
-#         st.error(f"Failed to load human detection model: {e}")
-#         return None
-
-# no_access_model = load_model()
-
+no_access_collection = init_mongo_connection()
 
 @st.cache_resource
 def load_model():
     try:
-        model = YOLO('yolov8n.onnx')
+        model = YOLO('yolov8n.onnx')  # Using ONNX model
+        logger.info("YOLO model loaded successfully")
         return model
     except Exception as e:
-        st.error(f"Failed to load model. Error: {e}")
+        logger.error(f"Failed to load model. Error: {e}")
         return None
 
-model = load_model()
-if model is None:
+no_access_model = load_model()
+if no_access_model is None:
     st.stop()
 
-# Function to save no-access event to MongoDB
-def save_no_access_event(timestamp, num_people, camera_name):
+def save_no_access_event(timestamp: datetime, num_people: int, camera_name: str, snapshot: np.ndarray = None):
+    """Save no-access event to MongoDB with optional image snapshot."""
     try:
         event = {
             'timestamp': timestamp,
             'date': timestamp.strftime("%Y-%m-%d"),
+            'month': timestamp.strftime("%Y-%m"),
             'num_people': num_people,
-            'camera_name': camera_name
+            'camera_name': camera_name,
+            'processed': False  # Flag for later processing if needed
         }
-        no_access_collection.insert_one(event)
-        logger.info(f"Saved no-access event: {event}")
+        
+        # Optionally store image snapshot (compressed)
+        if snapshot is not None:
+            _, buffer = cv2.imencode('.jpg', snapshot)
+            event['snapshot'] = buffer.tobytes()
+        
+        result = no_access_collection.insert_one(event)
+        logger.info(f"Saved no-access event with ID: {result.inserted_id}")
+        return result.inserted_id
     except Exception as e:
         logger.error(f"Failed to save no-access event: {e}")
+        return None
 
-# Function to load historical no-access data
-def load_no_access_data():
+def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
+    """Load historical no-access data with optional date or month filtering."""
     try:
+        query = {}
+        if date_filter:
+            query['date'] = date_filter
+        elif month_filter:
+            query['month'] = month_filter
+        
+        cursor = no_access_collection.find(query).sort('timestamp', -1)  # Newest first
+        
         data = {}
-        cursor = no_access_collection.find()
         for doc in cursor:
             date = doc['date']
             if date not in data:
                 data[date] = []
-            data[date].append({
+            entry = {
                 'timestamp': doc['timestamp'],
                 'num_people': doc['num_people'],
                 'camera_name': doc['camera_name']
-            })
+            }
+            if 'snapshot' in doc:
+                entry['has_snapshot'] = True
+            data[date].append(entry)
+        
+        logger.info(f"Loaded {len(data)} days of no-access data")
         return data
     except Exception as e:
         logger.error(f"Failed to load no-access data: {e}")
         return {}
 
-# Async function for no-access room detection loop
+def get_available_dates() -> List[str]:
+    """Get list of available dates with no-access events."""
+    try:
+        dates = no_access_collection.distinct('date')
+        return sorted(dates, reverse=True)
+    except Exception as e:
+        logger.error(f"Failed to get available dates: {e}")
+        return []
+
+def get_available_months() -> List[str]:
+    """Get list of available months with no-access events."""
+    try:
+        months = no_access_collection.distinct('month')
+        return sorted(months, reverse=True)
+    except Exception as e:
+        logger.error(f"Failed to get available months: {e}")
+        return []
+
 async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
+    """Main detection loop for no-access room monitoring."""
     confidence_threshold = 0.5
     human_class_id = 0  # COCO class ID for person
     delay_duration = 60  # 60-second delay after human detection
@@ -101,6 +124,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
     people_table = pd.DataFrame(columns=["Timestamp", "Number of People", "Camera"])
     last_timestamp = None
 
+    # Initialize video captures
     caps = {}
     for cam in selected_cameras:
         try:
@@ -137,7 +161,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                     continue
 
                 try:
-                    results = no_access_model.predict(frame_rgb, conf=confidence_threshold)
+                    results = no_access_model(frame_rgb, conf=confidence_threshold)
                 except Exception as e:
                     logger.error(f"Detection failed for {cam_name}: {e}")
                     continue
@@ -145,9 +169,10 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                 human_detections = []
                 for result in results:
                     for box in result.boxes:
-                        if int(box.cls) == human_class_id:
+                        if int(box.cls) == human_class_id and float(box.conf) >= confidence_threshold:
                             human_detections.append(box)
 
+                # Annotate frame with detections
                 annotated_frame = frame_rgb.copy()
                 for box in human_detections:
                     try:
@@ -160,30 +185,44 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                         logger.warning(f"Failed to draw box for {cam_name}: {e}")
                         continue
 
+                # Add counters and camera name to frame
                 cv2.putText(annotated_frame, f"Count: {len(human_detections)}", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 cv2.putText(annotated_frame, f"Camera: {cam_name}", (10, 60),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
+                # Display annotated frame
                 try:
                     video_placeholder.image(annotated_frame, channels="RGB", caption=cam_name)
                 except Exception as e:
                     logger.error(f"Failed to display frame for {cam_name}: {e}")
                     continue
 
-                if len(human_detections) > 0:
+                # Process detections
+                if human_detections:
                     timestamp = datetime.now()
                     timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    
                     if last_timestamp != timestamp_str:
-                        save_no_access_event(timestamp, len(human_detections), cam_name)
+                        # Save event to database with snapshot
+                        save_no_access_event(
+                            timestamp=timestamp,
+                            num_people=len(human_detections),
+                            camera_name=cam_name,
+                            snapshot=frame  # Save original frame
+                        )
+                        
+                        # Update table
                         new_entry = pd.DataFrame([[timestamp_str, len(human_detections), cam_name]],
-                                                columns=["Timestamp", "Number of People", "Camera"])
+                                              columns=["Timestamp", "Number of People", "Camera"])
                         people_table = pd.concat([people_table, new_entry], ignore_index=True)
+                        
                         last_timestamp = timestamp_str
                         last_detection_time = current_time
                         logger.info(f"Human detected on {cam_name}, initiating 60-second pause")
                         table_placeholder.warning(f"Human detected on {cam_name}! Pausing for 60 seconds.")
 
+                # Update detection table
                 try:
                     if not people_table.empty:
                         table_placeholder.dataframe(people_table)
@@ -195,6 +234,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
             await asyncio.sleep(0.03)  # ~30 FPS
 
     finally:
+        # Clean up resources
         for cap in caps.values():
             try:
                 cap.release()
