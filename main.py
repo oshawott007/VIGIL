@@ -480,7 +480,7 @@ with tab4:
                                    if cam['name'] in st.session_state.tailgating_selected_cameras]
                     asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
-with tab4:
+with tab5:
     st.header("🚪 Tailgating Detection")
     st.write("Detect unauthorized entry following authorized personnel.")
     
