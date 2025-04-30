@@ -492,65 +492,9 @@ with tab5:
         data = load_tailgating_data()
         date_options = list(data.keys())
         selected_date = st.selectbox("Select Date", date_options, key="tailgating_date_select")
-        
-        if selected_date:
-            events = data[selected_date]
-            if events:
-                df = pd.DataFrame(events, columns=["timestamp", "num_people", "camera_name"])
-                df.columns = ["Timestamp", "Number of People", "Camera"]
-                st.write(f"Tailgating events on {selected_date}:")
-                st.dataframe(df)
-            else:
-                st.info(f"No tailgating events recorded on {selected_date}")
     
-    if not st.session_state.cameras:
-        st.warning("Please add cameras first in the Camera Management tab")
-    else:
-        st.subheader("📋 Available Cameras")
-        selected = st.multiselect(
-            "Select cameras for tailgating detection",
-            [cam['name'] for cam in st.session_state.cameras],
-            default=st.session_state.tailgating_selected_cameras,
-            key="tailgating_cameras"
-        )
-        if selected != st.session_state.tailgating_selected_cameras:
-            st.session_state.tailgating_selected_cameras = selected
-            save_selected_cameras(tailgating_settings_collection, selected)
         
-        if st.session_state.tailgating_selected_cameras:
-            st.subheader("✅ Selected Cameras")
-            cols = st.columns(3)
-            for i, cam_name in enumerate(st.session_state.tailgating_selected_cameras):
-                with cols[i % 3]:
-                    st.info(f"**{cam_name}**")
-        
-        st.markdown("---")
-        st.subheader("🎬 Tailgating Detection Controls")
-        col1, col2 = st.columns(2)
-        with col1:
-            from tailgating import tailgating_model
-            if st.button("🚪 Start Tailgating Detection", 
-                        disabled=not st.session_state.tailgating_selected_cameras or tailgating_model is None,
-                        help="Start monitoring selected cameras for tailgating",
-                        key="start_tailgating_detection"):
-                st.session_state.tailgating_detection_active = True
-        with col2:
-            if st.button("⏹️ Stop Detection", key="stop_tailgating_detection"):
-                st.session_state.tailgating_detection_active = False
-        
-        if st.session_state.tailgating_selected_cameras:
-            st.subheader("📺 Live Feeds with Tailgating Detection")
-            video_placeholder = st.empty()
-            table_placeholder = st.empty()
-        
-            if st.session_state.tailgating_detection_active:
-                from tailgating import tailgating_model, tailgating_detection_loop
-                if tailgating_model is None:
-                    video_placeholder.error("Tailgating detection model not available")
-                else:
-                    selected_cams = [cam for cam in st.session_state.cameras 
-                                   if cam['name'] in st.session_state.tailgating_selected_cameras]
-                    asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
+      
 
 with tab6:
     st.header("🔒 No-Access Rooms Detection")
