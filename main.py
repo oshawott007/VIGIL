@@ -575,6 +575,33 @@ elif page == "Occupancy Dashboard":
 # Page 4: Tailgating
 elif page == "Tailgating":
     st.header("🚪 Tailgating Detection")
+    
+    # Initialize detection state from MongoDB
+    def get_tailgating_detection_state():
+        if client is None:
+            return False
+        doc = tailgating_settings_collection.find_one({"type": "detection_state"})
+        return doc.get("active", False) if doc else False
+    
+    def set_tailgating_detection_state(active):
+        if client is None:
+            return
+        tailgating_settings_collection.update_one(
+            {"type": "detection_state"},
+            {"$set": {"active": active}},
+            upsert=True
+        )
+    
+    # Initialize session state from DB
+    if 'tailgating_detection_active' not in st.session_state:
+        st.session_state.tailgating_detection_active = get_tailgating_detection_state()
+    
+    # Force sync between session state and DB
+    current_db_state = get_tailgating_detection_state()
+    if st.session_state.tailgating_detection_active != current_db_state:
+        st.session_state.tailgating_detection_active = current_db_state
+        st.experimental_rerun()
+
     st.write("Detect unauthorized entry following authorized personnel.")
     
     view_history = st.checkbox("View Historical Data", key="view_tailgating_history")
@@ -610,12 +637,15 @@ elif page == "Tailgating":
             st.session_state.tailgating_selected_cameras = selected
             save_selected_cameras(tailgating_settings_collection, selected)
         
-        if st.session_state.tailgating_selected_cameras:
-            st.subheader("✅ Selected Cameras")
-            cols = st.columns(3)
-            for i, cam_name in enumerate(st.session_state.tailgating_selected_cameras):
-                with cols[i % 3]:
-                    st.info(f"**{cam_name}**")
+        # Show active status and cameras
+        if st.session_state.tailgating_detection_active:
+            st.subheader("🟢 Detection Active")
+            if st.session_state.tailgating_selected_cameras:
+                st.subheader("✅ Active Cameras")
+                cols = st.columns(3)
+                for i, cam_name in enumerate(st.session_state.tailgating_selected_cameras):
+                    with cols[i % 3]:
+                        st.success(f"🔴 LIVE: {cam_name}")
         
         st.markdown("---")
         st.subheader("🎬 Tailgating Detection Controls")
@@ -623,13 +653,19 @@ elif page == "Tailgating":
         with col1:
             from tailgating import tailgating_model
             if st.button("🚪 Start Tailgating Detection", 
-                        disabled=not st.session_state.tailgating_selected_cameras or tailgating_model is None,
+                        disabled=st.session_state.tailgating_detection_active or not st.session_state.tailgating_selected_cameras or tailgating_model is None,
                         help="Start monitoring selected cameras for tailgating",
                         key="start_tailgating_detection"):
                 st.session_state.tailgating_detection_active = True
+                set_tailgating_detection_state(True)
+                st.experimental_rerun()
         with col2:
-            if st.button("⏹️ Stop Detection", key="stop_tailgating_detection"):
+            if st.button("⏹️ Stop Detection", 
+                        disabled=not st.session_state.tailgating_detection_active,
+                        key="stop_tailgating_detection"):
                 st.session_state.tailgating_detection_active = False
+                set_tailgating_detection_state(False)
+                st.experimental_rerun()
         
         if st.session_state.tailgating_selected_cameras:
             st.subheader("📺 Live Feeds with Tailgating Detection")
@@ -645,9 +681,38 @@ elif page == "Tailgating":
                                    if cam['name'] in st.session_state.tailgating_selected_cameras]
                     asyncio.run(tailgating_detection_loop(video_placeholder, table_placeholder, selected_cams))
 
+
+
 # Page 5: No-Access Rooms
 elif page == "No-Access Rooms":
     st.header("🔒 No-Access Rooms Detection")
+    
+    # Initialize detection state from MongoDB
+    def get_no_access_detection_state():
+        if client is None:
+            return False
+        doc = no_access_settings_collection.find_one({"type": "detection_state"})
+        return doc.get("active", False) if doc else False
+    
+    def set_no_access_detection_state(active):
+        if client is None:
+            return
+        no_access_settings_collection.update_one(
+            {"type": "detection_state"},
+            {"$set": {"active": active}},
+            upsert=True
+        )
+    
+    # Initialize session state from DB
+    if 'no_access_detection_active' not in st.session_state:
+        st.session_state.no_access_detection_active = get_no_access_detection_state()
+    
+    # Force sync between session state and DB
+    current_db_state = get_no_access_detection_state()
+    if st.session_state.no_access_detection_active != current_db_state:
+        st.session_state.no_access_detection_active = current_db_state
+        st.experimental_rerun()
+
     st.write("Detect and log human presence in restricted areas.")
     
     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
@@ -746,25 +811,34 @@ elif page == "No-Access Rooms":
             st.session_state.no_access_selected_cameras = selected
             save_selected_cameras(no_access_settings_collection, selected)
         
-        if st.session_state.no_access_selected_cameras:
-            st.subheader("✅ Selected Cameras")
-            cols = st.columns(3)
-            for i, cam_name in enumerate(st.session_state.no_access_selected_cameras):
-                with cols[i % 3]:
-                    st.info(f"**{cam_name}**")
+        # Show active status and cameras
+        if st.session_state.no_access_detection_active:
+            st.subheader("🟢 Detection Active")
+            if st.session_state.no_access_selected_cameras:
+                st.subheader("✅ Active Cameras")
+                cols = st.columns(3)
+                for i, cam_name in enumerate(st.session_state.no_access_selected_cameras):
+                    with cols[i % 3]:
+                        st.success(f"🔴 LIVE: {cam_name}")
         
         st.markdown("---")
         st.subheader("🎬 No-Access Detection Controls")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔒 Start No-Access Detection", 
-                        disabled=not st.session_state.no_access_selected_cameras or no_access_model is None,
+                        disabled=st.session_state.no_access_detection_active or not st.session_state.no_access_selected_cameras or no_access_model is None,
                         help="Start monitoring selected cameras for human presence",
                         key="start_no_access_detection"):
                 st.session_state.no_access_detection_active = True
+                set_no_access_detection_state(True)
+                st.experimental_rerun()
         with col2:
-            if st.button("⏹️ Stop Detection", key="stop_no_access_detection"):
+            if st.button("⏹️ Stop Detection", 
+                        disabled=not st.session_state.no_access_detection_active,
+                        key="stop_no_access_detection"):
                 st.session_state.no_access_detection_active = False
+                set_no_access_detection_state(False)
+                st.experimental_rerun()
         
         if st.session_state.no_access_selected_cameras:
             st.subheader("📺 Live Feeds with No-Access Detection")
