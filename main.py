@@ -830,6 +830,107 @@ elif page == "Fire Detection":
         st.write("3. The bot will reply with your chat ID")
 
 # Page 3: Occupancy Dashboard
+# elif page == "Occupancy Dashboard":
+#     st.header("👥 Occupancy Dashboard")
+#     st.write("Track and display occupancy counts in monitored areas.")
+    
+#     view_history = st.checkbox("View Historical Data", key="view_occupancy_history")
+    
+#     if view_history:
+#         st.subheader("Historical Data")
+#         try:
+#             data = load_occupancy_data()
+#             date_options = sorted(list(data.keys()))
+#             if date_options:
+#                 selected_date = st.selectbox("Select Date", date_options, key="occupancy_date_select")
+#                 if selected_date:
+#                     doc = data[selected_date]
+#                     st.write(f"Maximum occupancy on {selected_date}: {doc['max_count']}")
+                    
+#                     hist_fig, hist_ax = plt.subplots()
+#                     hours = [f"{h}:00" for h in range(24)]
+#                     hist_ax.plot(hours, doc["hourly_counts"], marker='o', color='orange')
+#                     hist_ax.set_title(f"Hourly Maximum Occupancy on {selected_date}")
+#                     hist_ax.set_xlabel("Hour of Day")
+#                     hist_ax.set_ylabel("Maximum People Count")
+#                     plt.xticks(rotation=45)
+#                     st.pyplot(hist_fig)
+#                     plt.close(hist_fig)
+                    
+#                     hist_fig, hist_ax = plt.subplots(figsize=(10, 4))
+#                     minutes = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 15)]
+#                     hist_ax.plot(range(1440), doc["minute_counts"], linewidth=1, color='orange')
+#                     hist_ax.set_title(f"Minute-by-Minute Presence on {selected_date}")
+#                     hist_ax.set_xlabel("Time (24h)")
+#                     hist_ax.set_ylabel("People Count")
+#                     hist_ax.set_xticks(range(0, 1440, 15*4))
+#                     hist_ax.set_xticklabels(minutes[::4], rotation=45)
+#                     st.pyplot(hist_fig)
+#                     plt.close(hist_fig)
+#             else:
+#                 st.info("No historical occupancy data available")
+#         except Exception as e:
+#             st.error(f"Failed to load historical data: {e}")
+    
+#     if not st.session_state.cameras:
+#         st.warning("Please add cameras first in the Camera Management tab")
+#     else:
+#         st.subheader("📋 Available Cameras")
+#         selected = st.multiselect(
+#             "Select cameras for occupancy monitoring",
+#             [cam['name'] for cam in st.session_state.cameras],
+#             default=st.session_state.occ_selected_cameras,
+#             key="occupancy_cameras"
+#         )
+#         if selected != st.session_state.occ_selected_cameras:
+#             st.session_state.occ_selected_cameras = selected
+#             save_selected_cameras(occupancy_settings_collection, selected)
+        
+#         if st.session_state.occ_selected_cameras:
+#             st.subheader("✅ Selected Cameras")
+#             cols = st.columns(3)
+#             for i, cam_name in enumerate(st.session_state.occ_selected_cameras):
+#                 with cols[i % 3]:
+#                     st.info(f"**{cam_name}**")
+        
+#         st.markdown("---")
+#         st.subheader("🎬 Occupancy Detection Controls")
+#         col1, col2 = st.columns(2)
+#         with col1:
+#             from occupancy_detection import occ_model
+#             if st.button("👥 Start Occupancy Tracking", 
+#                         disabled=not st.session_state.occ_selected_cameras or occ_model is None,
+#                         help="Start monitoring selected cameras for people counting",
+#                         key="start_occupancy_tracking"):
+#                 st.session_state.occ_detection_active = True
+#         with col2:
+#             if st.button("⏹️ Stop Tracking", key="stop_occupancy_tracking"):
+#                 st.session_state.occ_detection_active = False
+        
+#         if st.session_state.occ_selected_cameras:
+#             st.subheader("📺 Live Feeds with Occupancy Count")
+#             video_placeholder = st.empty()
+        
+#         stats_placeholder = st.empty()
+#         hourly_chart_placeholder = st.empty()
+#         minute_chart_placeholder = st.empty()
+        
+#         if st.session_state.occ_detection_active:
+#             from occupancy_detection import occ_model
+#             if occ_model is None:
+#                 st.error("Occupancy detection model not available")
+#             else:
+#                 try:
+#                     asyncio.run(occupancy_detection_loop(
+#                         video_placeholder, stats_placeholder,
+#                         hourly_chart_placeholder, minute_chart_placeholder
+#                     ))
+#                 except Exception as e:
+#                     st.error(f"Occupancy detection failed: {e}")
+#                     st.session_state.occ_detection_active = False
+
+
+# Page 3: Occupancy Dashboard
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
     st.write("Track and display occupancy counts in monitored areas.")
@@ -886,12 +987,13 @@ elif page == "Occupancy Dashboard":
             st.session_state.occ_selected_cameras = selected
             save_selected_cameras(occupancy_settings_collection, selected)
         
-        if st.session_state.occ_selected_cameras:
-            st.subheader("✅ Selected Cameras")
+        # Show selected cameras only when detection is active
+        if st.session_state.occ_detection_active and st.session_state.occ_selected_cameras:
+            st.subheader("✅ Active Cameras")
             cols = st.columns(3)
             for i, cam_name in enumerate(st.session_state.occ_selected_cameras):
                 with cols[i % 3]:
-                    st.info(f"**{cam_name}**")
+                    st.success(f"🔴 LIVE: {cam_name}")
         
         st.markdown("---")
         st.subheader("🎬 Occupancy Detection Controls")
@@ -899,15 +1001,19 @@ elif page == "Occupancy Dashboard":
         with col1:
             from occupancy_detection import occ_model
             if st.button("👥 Start Occupancy Tracking", 
-                        disabled=not st.session_state.occ_selected_cameras or occ_model is None,
+                        disabled=st.session_state.occ_detection_active or not st.session_state.occ_selected_cameras or occ_model is None,
                         help="Start monitoring selected cameras for people counting",
                         key="start_occupancy_tracking"):
                 st.session_state.occ_detection_active = True
+                st.rerun()  # Force refresh to show the active cameras
         with col2:
-            if st.button("⏹️ Stop Tracking", key="stop_occupancy_tracking"):
+            if st.button("⏹️ Stop Tracking", 
+                        disabled=not st.session_state.occ_detection_active,
+                        key="stop_occupancy_tracking"):
                 st.session_state.occ_detection_active = False
+                st.rerun()  # Force refresh to update the UI
         
-        if st.session_state.occ_selected_cameras:
+        if st.session_state.occ_selected_cameras and st.session_state.occ_detection_active:
             st.subheader("📺 Live Feeds with Occupancy Count")
             video_placeholder = st.empty()
         
@@ -928,6 +1034,7 @@ elif page == "Occupancy Dashboard":
                 except Exception as e:
                     st.error(f"Occupancy detection failed: {e}")
                     st.session_state.occ_detection_active = False
+                    st.rerun()
 
 # Page 4: Tailgating
 elif page == "Tailgating":
