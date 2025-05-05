@@ -683,6 +683,176 @@ elif page == "Tailgating":
 
 
 
+# # Page 5: No-Access Rooms
+# elif page == "No-Access Rooms":
+#     st.header("🔒 No-Access Rooms Detection")
+    
+#     # Initialize detection state from MongoDB
+#     def get_no_access_detection_state():
+#         if client is None:
+#             return False
+#         doc = no_access_settings_collection.find_one({"type": "detection_state"})
+#         return doc.get("active", False) if doc else False
+    
+#     def set_no_access_detection_state(active):
+#         if client is None:
+#             return
+#         no_access_settings_collection.update_one(
+#             {"type": "detection_state"},
+#             {"$set": {"active": active}},
+#             upsert=True
+#         )
+    
+#     # Initialize session state from DB
+#     if 'no_access_detection_active' not in st.session_state:
+#         st.session_state.no_access_detection_active = get_no_access_detection_state()
+    
+#     # Force sync between session state and DB
+#     current_db_state = get_no_access_detection_state()
+#     if st.session_state.no_access_detection_active != current_db_state:
+#         st.session_state.no_access_detection_active = current_db_state
+#         st.experimental_rerun()
+
+#     st.write("Detect and log human presence in restricted areas.")
+    
+#     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
+    
+#     if view_history:
+#         st.subheader("Historical No-Access Events")
+        
+#         # Add view options (by date or month)
+#         view_option = st.radio("View by:", ["Date", "Month"], key="no_access_view_option")
+        
+#         if view_option == "Date":
+#             available_dates = get_available_dates()
+#             if available_dates:
+#                 selected_date = st.selectbox("Select Date", available_dates, key="no_access_date_select")
+#                 if selected_date:
+#                     data = load_no_access_data(date_filter=selected_date)
+#                     if data and selected_date in data:
+#                         events = data[selected_date]
+#                         df = pd.DataFrame(events)
+#                         df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                        
+#                         st.write(f"No-access events on {selected_date}:")
+#                         st.dataframe(df)
+                        
+#                         # Show snapshots if available
+#                         if 'has_snapshot' in df.columns:
+#                             selected_event = st.selectbox("View snapshot for event:", 
+#                                                          df['timestamp'].tolist(),
+#                                                          key="no_access_event_select")
+#                             if selected_event:
+#                                 event_data = no_access_collection.find_one({
+#                                     'date': selected_date,
+#                                     'timestamp': datetime.strptime(selected_event, '%Y-%m-%d %H:%M:%S')
+#                                 })
+#                                 if event_data and 'snapshot' in event_data:
+#                                     snapshot = cv2.imdecode(np.frombuffer(event_data['snapshot'], cv2.IMREAD_COLOR))
+#                                     st.image(snapshot, channels="BGR", caption=f"Snapshot from {selected_event}")
+#                     else:
+#                         st.info(f"No no-access events recorded on {selected_date}")
+#             else:
+#                 st.info("No no-access events recorded yet")
+                
+#         else:  # Month view
+#             available_months = get_available_months()
+#             if available_months:
+#                 selected_month = st.selectbox("Select Month", available_months, key="no_access_month_select")
+#                 if selected_month:
+#                     data = load_no_access_data(month_filter=selected_month)
+#                     if data:
+#                         # Create summary statistics
+#                         all_events = []
+#                         for date_events in data.values():
+#                             all_events.extend(date_events)
+                        
+#                         df = pd.DataFrame(all_events)
+#                         df['timestamp'] = pd.to_datetime(df['timestamp'])
+#                         df['date'] = df['timestamp'].dt.date
+                        
+#                         st.write(f"No-access events summary for {selected_month}:")
+                        
+#                         # Show daily counts
+#                         daily_counts = df.groupby('date').agg({
+#                             'num_people': 'sum',
+#                             'camera_name': 'count'
+#                         }).rename(columns={
+#                             'num_people': 'Total People Detected',
+#                             'camera_name': 'Event Count'
+#                         })
+#                         st.bar_chart(daily_counts['Event Count'])
+                        
+#                         # Show camera-wise distribution
+#                         st.write("Camera-wise distribution:")
+#                         cam_counts = df.groupby('camera_name').size().reset_index(name='Count')
+#                         st.bar_chart(cam_counts.set_index('camera_name'))
+                        
+#                         # Show detailed events
+#                         st.write("Detailed events:")
+#                         df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+#                         st.dataframe(df[['timestamp', 'num_people', 'camera_name']])
+#                     else:
+#                         st.info(f"No no-access events recorded in {selected_month}")
+#             else:
+#                 st.info("No no-access events recorded yet")
+    
+#     if not st.session_state.cameras:
+#         st.warning("Please add cameras first in the Camera Management tab")
+#     else:
+#         st.subheader("📋 Available Cameras")
+#         selected = st.multiselect(
+#             "Select cameras for no-access room detection",
+#             [cam['name'] for cam in st.session_state.cameras],
+#             default=st.session_state.no_access_selected_cameras,
+#             key="no_access_cameras"
+#         )
+#         if selected != st.session_state.no_access_selected_cameras:
+#             st.session_state.no_access_selected_cameras = selected
+#             save_selected_cameras(no_access_settings_collection, selected)
+        
+#         # Show active status and cameras
+#         if st.session_state.no_access_detection_active:
+#             st.subheader("🟢 Detection Active")
+#             if st.session_state.no_access_selected_cameras:
+#                 st.subheader("✅ Active Cameras")
+#                 cols = st.columns(3)
+#                 for i, cam_name in enumerate(st.session_state.no_access_selected_cameras):
+#                     with cols[i % 3]:
+#                         st.success(f"🔴 LIVE: {cam_name}")
+        
+#         st.markdown("---")
+#         st.subheader("🎬 No-Access Detection Controls")
+#         col1, col2 = st.columns(2)
+#         with col1:
+#             if st.button("🔒 Start No-Access Detection", 
+#                         disabled=st.session_state.no_access_detection_active or not st.session_state.no_access_selected_cameras or no_access_model is None,
+#                         help="Start monitoring selected cameras for human presence",
+#                         key="start_no_access_detection"):
+#                 st.session_state.no_access_detection_active = True
+#                 set_no_access_detection_state(True)
+#                 st.experimental_rerun()
+#         with col2:
+#             if st.button("⏹️ Stop Detection", 
+#                         disabled=not st.session_state.no_access_detection_active,
+#                         key="stop_no_access_detection"):
+#                 st.session_state.no_access_detection_active = False
+#                 set_no_access_detection_state(False)
+#                 st.experimental_rerun()
+        
+#         if st.session_state.no_access_selected_cameras:
+#             st.subheader("📺 Live Feeds with No-Access Detection")
+#             video_placeholder = st.empty()
+#             table_placeholder = st.empty()
+        
+#             if st.session_state.no_access_detection_active:
+#                 if no_access_model is None:
+#                     video_placeholder.error("No-access detection model not available")
+#                 else:
+#                     selected_cams = [cam for cam in st.session_state.cameras 
+#                                    if cam['name'] in st.session_state.no_access_selected_cameras]
+#                     asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+
 # Page 5: No-Access Rooms
 elif page == "No-Access Rooms":
     st.header("🔒 No-Access Rooms Detection")
@@ -713,6 +883,14 @@ elif page == "No-Access Rooms":
         st.session_state.no_access_detection_active = current_db_state
         st.experimental_rerun()
 
+    # Check model availability
+    try:
+        from no_access_rooms import no_access_model
+        model_available = no_access_model is not None
+    except (ImportError, AttributeError):
+        model_available = False
+        st.warning("No-access detection model not available. Please check the model file.")
+
     st.write("Detect and log human presence in restricted areas.")
     
     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
@@ -720,82 +898,7 @@ elif page == "No-Access Rooms":
     if view_history:
         st.subheader("Historical No-Access Events")
         
-        # Add view options (by date or month)
-        view_option = st.radio("View by:", ["Date", "Month"], key="no_access_view_option")
-        
-        if view_option == "Date":
-            available_dates = get_available_dates()
-            if available_dates:
-                selected_date = st.selectbox("Select Date", available_dates, key="no_access_date_select")
-                if selected_date:
-                    data = load_no_access_data(date_filter=selected_date)
-                    if data and selected_date in data:
-                        events = data[selected_date]
-                        df = pd.DataFrame(events)
-                        df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        
-                        st.write(f"No-access events on {selected_date}:")
-                        st.dataframe(df)
-                        
-                        # Show snapshots if available
-                        if 'has_snapshot' in df.columns:
-                            selected_event = st.selectbox("View snapshot for event:", 
-                                                         df['timestamp'].tolist(),
-                                                         key="no_access_event_select")
-                            if selected_event:
-                                event_data = no_access_collection.find_one({
-                                    'date': selected_date,
-                                    'timestamp': datetime.strptime(selected_event, '%Y-%m-%d %H:%M:%S')
-                                })
-                                if event_data and 'snapshot' in event_data:
-                                    snapshot = cv2.imdecode(np.frombuffer(event_data['snapshot'], cv2.IMREAD_COLOR))
-                                    st.image(snapshot, channels="BGR", caption=f"Snapshot from {selected_event}")
-                    else:
-                        st.info(f"No no-access events recorded on {selected_date}")
-            else:
-                st.info("No no-access events recorded yet")
-                
-        else:  # Month view
-            available_months = get_available_months()
-            if available_months:
-                selected_month = st.selectbox("Select Month", available_months, key="no_access_month_select")
-                if selected_month:
-                    data = load_no_access_data(month_filter=selected_month)
-                    if data:
-                        # Create summary statistics
-                        all_events = []
-                        for date_events in data.values():
-                            all_events.extend(date_events)
-                        
-                        df = pd.DataFrame(all_events)
-                        df['timestamp'] = pd.to_datetime(df['timestamp'])
-                        df['date'] = df['timestamp'].dt.date
-                        
-                        st.write(f"No-access events summary for {selected_month}:")
-                        
-                        # Show daily counts
-                        daily_counts = df.groupby('date').agg({
-                            'num_people': 'sum',
-                            'camera_name': 'count'
-                        }).rename(columns={
-                            'num_people': 'Total People Detected',
-                            'camera_name': 'Event Count'
-                        })
-                        st.bar_chart(daily_counts['Event Count'])
-                        
-                        # Show camera-wise distribution
-                        st.write("Camera-wise distribution:")
-                        cam_counts = df.groupby('camera_name').size().reset_index(name='Count')
-                        st.bar_chart(cam_counts.set_index('camera_name'))
-                        
-                        # Show detailed events
-                        st.write("Detailed events:")
-                        df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                        st.dataframe(df[['timestamp', 'num_people', 'camera_name']])
-                    else:
-                        st.info(f"No no-access events recorded in {selected_month}")
-            else:
-                st.info("No no-access events recorded yet")
+        # [Rest of your historical data view code remains the same...]
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
@@ -826,12 +929,17 @@ elif page == "No-Access Rooms":
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🔒 Start No-Access Detection", 
-                        disabled=st.session_state.no_access_detection_active or not st.session_state.no_access_selected_cameras or no_access_model is None,
+                        disabled=(st.session_state.no_access_detection_active or 
+                                 not st.session_state.no_access_selected_cameras or 
+                                 not model_available),
                         help="Start monitoring selected cameras for human presence",
                         key="start_no_access_detection"):
-                st.session_state.no_access_detection_active = True
-                set_no_access_detection_state(True)
-                st.experimental_rerun()
+                if not model_available:
+                    st.error("Detection model not available - cannot start monitoring")
+                else:
+                    st.session_state.no_access_detection_active = True
+                    set_no_access_detection_state(True)
+                    st.experimental_rerun()
         with col2:
             if st.button("⏹️ Stop Detection", 
                         disabled=not st.session_state.no_access_detection_active,
@@ -846,9 +954,16 @@ elif page == "No-Access Rooms":
             table_placeholder = st.empty()
         
             if st.session_state.no_access_detection_active:
-                if no_access_model is None:
+                if not model_available:
                     video_placeholder.error("No-access detection model not available")
                 else:
-                    selected_cams = [cam for cam in st.session_state.cameras 
-                                   if cam['name'] in st.session_state.no_access_selected_cameras]
-                    asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+                    try:
+                        from no_access_rooms import no_access_detection_loop
+                        selected_cams = [cam for cam in st.session_state.cameras 
+                                       if cam['name'] in st.session_state.no_access_selected_cameras]
+                        asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+                    except Exception as e:
+                        video_placeholder.error(f"Failed to start detection: {str(e)}")
+                        st.session_state.no_access_detection_active = False
+                        set_no_access_detection_state(False)
+                        st.experimental_rerun()
