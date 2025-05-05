@@ -842,7 +842,6 @@ elif page == "Fire Detection":
         st.write("1. Start a chat with @userinfobot on Telegram")
         st.write("2. Send any message to the bot")
         st.write("3. The bot will reply with your chat ID")
-   
         
 
 # Page 3: Occupancy Dashboard
