@@ -771,7 +771,29 @@ elif page == "Fire Detection":
         st.experimental_rerun()
 
     with st.expander("🔔 Telegram Notification Settings"):
-        # ... [rest of your Telegram settings code] ...
+        st.subheader("Manage Recipients")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Add New Recipient")
+            new_name = st.text_input("Recipient Name", key="new_recipient_name")
+            new_chat_id = st.text_input("Recipient Chat ID", key="new_chat_id")
+            if st.button("Add Recipient", key="add_recipient") and new_name and new_chat_id:
+                from fire_detection import chat_data, save_chat_data
+                chat_data.append({"name": new_name, "chat_id": new_chat_id})
+                save_chat_data()
+                st.success(f"Added {new_name} (Chat ID: {new_chat_id})")
+                st.rerun()
+        
+        with col2:
+            st.subheader("Current Recipients")
+            from fire_detection import chat_data, save_chat_data
+            for i, recipient in enumerate(chat_data):
+                st.write(f"Name: {recipient['name']}, Chat ID: {recipient['chat_id']}")
+                if st.button(f"Remove {recipient['name']}", key=f"remove_recipient_{i}"):
+                    chat_data.pop(i)
+                    save_chat_data()
+                    st.rerun()
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
