@@ -739,14 +739,30 @@ if page == "Camera Management":
                 st.session_state.confirm_remove = None
                 st.rerun()
 
-        
+
 # Page 2: Fire Detection
 elif page == "Fire Detection":
     st.header("🔥 Fire and Smoke Detection")
     
-    # Initialize session state if not already present
+    # Initialize detection state from MongoDB
+    def get_fire_detection_state():
+        if client is None:
+            return False
+        doc = fire_settings_collection.find_one({"type": "detection_state"})
+        return doc.get("active", False) if doc else False
+    
+    def set_fire_detection_state(active):
+        if client is None:
+            return
+        fire_settings_collection.update_one(
+            {"type": "detection_state"},
+            {"$set": {"active": active}},
+            upsert=True
+        )
+    
+    # Initialize session state from DB if not already set
     if 'fire_detection_active' not in st.session_state:
-        st.session_state.fire_detection_active = False
+        st.session_state.fire_detection_active = get_fire_detection_state()
     
     with st.expander("🔔 Telegram Notification Settings"):
         st.subheader("Manage Recipients")
@@ -807,6 +823,7 @@ elif page == "Fire Detection":
                         help="Start monitoring selected cameras for fire and smoke",
                         key="start_fire_detection"):
                 st.session_state.fire_detection_active = True
+                set_fire_detection_state(True)  # Persist to DB
                 st.session_state.telegram_status = []
                 st.experimental_rerun()
         with col2:
@@ -814,6 +831,7 @@ elif page == "Fire Detection":
                         disabled=not st.session_state.fire_detection_active,
                         key="stop_fire_detection"):
                 st.session_state.fire_detection_active = False
+                set_fire_detection_state(False)  # Persist to DB
                 st.experimental_rerun()
         
         if st.session_state.fire_selected_cameras and st.session_state.fire_detection_active:
@@ -840,6 +858,9 @@ elif page == "Fire Detection":
         st.write("1. Start a chat with @userinfobot on Telegram")
         st.write("2. Send any message to the bot")
         st.write("3. The bot will reply with your chat ID")
+     
+   
+        
 
 # Page 3: Occupancy Dashboard
 # elif page == "Occupancy Dashboard":
