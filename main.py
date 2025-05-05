@@ -744,6 +744,10 @@ if page == "Camera Management":
 elif page == "Fire Detection":
     st.header("🔥 Fire and Smoke Detection")
     
+    # Initialize session state if not already present
+    if 'fire_detection_active' not in st.session_state:
+        st.session_state.fire_detection_active = False
+    
     with st.expander("🔔 Telegram Notification Settings"):
         st.subheader("Manage Recipients")
         
@@ -783,13 +787,15 @@ elif page == "Fire Detection":
             st.session_state.fire_selected_cameras = selected
             save_selected_cameras(fire_settings_collection, selected)
         
-        # Show active cameras when detection is running
-        if st.session_state.fire_detection_active and st.session_state.fire_selected_cameras:
-            st.subheader("✅ Active Cameras")
-            cols = st.columns(3)
-            for i, cam_name in enumerate(st.session_state.fire_selected_cameras):
-                with cols[i % 3]:
-                    st.success(f"🔴 LIVE: {cam_name}")
+        # Show active status and cameras
+        if st.session_state.fire_detection_active:
+            st.subheader("🟢 Detection Active")
+            if st.session_state.fire_selected_cameras:
+                st.subheader("✅ Active Cameras")
+                cols = st.columns(3)
+                for i, cam_name in enumerate(st.session_state.fire_selected_cameras):
+                    with cols[i % 3]:
+                        st.success(f"🔴 LIVE: {cam_name}")
         
         st.markdown("---")
         st.subheader("🎬 Fire Detection Controls")
@@ -802,13 +808,13 @@ elif page == "Fire Detection":
                         key="start_fire_detection"):
                 st.session_state.fire_detection_active = True
                 st.session_state.telegram_status = []
-                st.rerun()  # Force refresh to update UI
+                st.experimental_rerun()
         with col2:
             if st.button("⏹️ Stop Detection", 
                         disabled=not st.session_state.fire_detection_active,
                         key="stop_fire_detection"):
                 st.session_state.fire_detection_active = False
-                st.rerun()  # Force refresh to update UI
+                st.experimental_rerun()
         
         if st.session_state.fire_selected_cameras and st.session_state.fire_detection_active:
             st.subheader("📺 Live Feeds with Fire Detection")
