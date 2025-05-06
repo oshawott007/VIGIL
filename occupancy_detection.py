@@ -600,49 +600,62 @@ occ_model = load_model()
 if occ_model is None:
     st.stop()
 
-# Function to insert default data for May 5, 2025, for multiple cameras
+# Function to insert default data for May 4 and May 5, 2025
 def insert_default_data():
-    """Insert default occupancy data for May 5, 2025, for Cam Road and Cam Hall"""
+    """Insert default occupancy data for May 4 and May 5, 2025, for Cam Road and Cam Hall"""
     if occupancy_collection is None:
         logger.warning("No MongoDB collection available for inserting default data")
         return
     
-    default_date = "2025-05-05"
+    default_dates = ["2025-05-04", "2025-05-05"]
     cameras = ["Cam Road", "Cam Hall"]
     
-    for camera_name in cameras:
-        existing_doc = occupancy_collection.find_one({"date": default_date, "camera_name": camera_name})
-        if existing_doc:
-            logger.info(f"Default data for {default_date}, {camera_name} already exists")
-            continue
-        
-        # Create sample data
-        presence = [0] * 1440  # Minute-by-minute presence (1 or 0)
-        hourly_max_counts = [0] * 24  # Max people per hour
-        # Simulate activity from 8:00 to 12:00
-        for minute in range(480, 720):  # 8:00 to 12:00
-            presence[minute] = np.random.choice([0, 1], p=[0.3, 0.7])  # 70% chance of presence
-        for hour in range(24):
-            start_minute = hour * 60
-            end_minute = start_minute + 60
-            max_count = max(np.random.randint(0, 10, size=10)) if hour in range(8, 12) else 0
-            hourly_max_counts[hour] = max_count
-        
-        default_doc = {
-            "date": default_date,
-            "camera_name": camera_name,
-            "presence": presence,
-            "hourly_max_counts": hourly_max_counts,
-            "last_updated": datetime(2025, 5, 5, 23, 59, 59),
-            "document_id": str(uuid.uuid4())
-        }
-        
-        try:
-            occupancy_collection.insert_one(default_doc)
-            logger.info(f"Inserted default data for {default_date}, {camera_name}")
-        except Exception as e:
-            logger.error(f"Failed to insert default data for {camera_name}: {str(e)}")
-            st.warning(f"Failed to insert default data for {camera_name}: {str(e)}")
+    for default_date in default_dates:
+        for camera_name in cameras:
+            existing_doc = occupancy_collection.find_one({"date": default_date, "camera_name": camera_name})
+            if existing_doc:
+                logger.info(f"Default data for {default_date}, {camera_name} already exists")
+                continue
+            
+            # Create sample data
+            presence = [0] * 1440  # Minute-by-minute presence (1 or 0)
+            hourly_max_counts = [0] * 24  # Max people per hour
+            
+            # Simulate different patterns for each date
+            if default_date == "2025-05-04":
+                # Activity from 7:00 to 11:00 and 15:00 to 18:00
+                for minute in range(420, 660):  # 7:00 to 11:00
+                    presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])  # 60% chance of presence
+                for minute in range(900, 1080):  # 15:00 to 18:00
+                    presence[minute] = np.random.choice([0, 1], p=[0.5, 0.5])  # 50% chance of presence
+                for hour in range(24):
+                    max_count = max(np.random.randint(0, 8, size=10)) if hour in range(7, 11) or hour in range(15, 18) else 0
+                    hourly_max_counts[hour] = max_count
+            else:  # 2025-05-05
+                # Activity from 8:00 to 12:00 and 14:00 to 17:00
+                for minute in range(480, 720):  # 8:00 to 12:00
+                    presence[minute] = np.random.choice([0, 1], p=[0.3, 0.7])  # 70% chance of presence
+                for minute in range(840, 1020):  # 14:00 to 17:00
+                    presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])  # 60% chance of presence
+                for hour in range(24):
+                    max_count = max(np.random.randint(0, 10, size=10)) if hour in range(8, 12) or hour in range(14, 17) else 0
+                    hourly_max_counts[hour] = max_count
+            
+            default_doc = {
+                "date": default_date,
+                "camera_name": camera_name,
+                "presence": presence,
+                "hourly_max_counts": hourly_max_counts,
+                "last_updated": datetime(2025, 5, 4 if default_date == "2025-05-04" else 5, 23, 59, 59),
+                "document_id": str(uuid.uuid4())
+            }
+            
+            try:
+                occupancy_collection.insert_one(default_doc)
+                logger.info(f"Inserted default data for {default_date}, {camera_name}")
+            except Exception as e:
+                logger.error(f"Failed to insert default data for {camera_name}: {str(e)}")
+                st.warning(f"Failed to insert default data for {camera_name}: {str(e)}")
 
 # Function to get or create today's document for a specific camera
 def get_today_document(camera_name):
