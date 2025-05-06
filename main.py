@@ -6,6 +6,7 @@ from datetime import datetime
 import asyncio
 import requests 
 import time
+import logging 
 import threading
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
@@ -15,6 +16,9 @@ from fire_detection import fire_detection_loop, save_chat_data
 from occupancy_detection import occupancy_detection_loop, load_occupancy_data
 from no_access_rooms import no_access_detection_loop, load_no_access_data
 
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__
 # MongoDB Atlas connection
 MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
@@ -327,7 +331,7 @@ elif page == "Fire Detection":
         st.write("3. The bot will reply with your chat ID")
         
 # Page 3: Occupancy Dashboard
-# Page 3: Occupancy Dashboard
+#######################################
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
     
@@ -352,6 +356,7 @@ elif page == "Occupancy Dashboard":
         from occupancy_detection import occupancy_collection
         if occupancy_collection is None:
             st.error("No MongoDB collection available")
+            logger.error("No MongoDB collection available for clearing invalid documents")
             return False
         try:
             result = occupancy_collection.delete_many({
@@ -376,6 +381,7 @@ elif page == "Occupancy Dashboard":
         from occupancy_detection import occupancy_collection
         if occupancy_collection is None:
             st.error("No MongoDB collection available")
+            logger.error("No MongoDB collection available for checking status")
             return
         try:
             count = occupancy_collection.count_documents({})
@@ -417,9 +423,19 @@ elif page == "Occupancy Dashboard":
     if st.sidebar.button("Clear Invalid Documents and Insert Default Data"):
         if clear_invalid_documents():
             from occupancy_detection import insert_default_data
-            insert_default_data()
-            st.success("Default data inserted for 2025-05-04 and 2025-05-05")
-            st.experimental_rerun()
+            for _ in range(3):  # Retry up to 3 times
+                try:
+                    insert_default_data()
+                    st.success("Default data inserted for 2025-05-04 and 2025-05-05")
+                    logger.info("Default data inserted successfully")
+                    st.experimental_rerun()
+                    break
+                except Exception as e:
+                    st.warning(f"Retry failed: {e}")
+                    logger.error(f"Retry failed for insert_default_data: {e}")
+            else:
+                st.error("Failed to insert default data after retries")
+                logger.error("Failed to insert default data after retries")
     
     view_history = st.checkbox("View Historical Data", key="view_occupancy_history")
     
@@ -458,23 +474,32 @@ elif page == "Occupancy Dashboard":
                     st.error(f"No data found for {selected_date}.")
             else:
                 st.warning("No historical occupancy data available. Attempting to insert default data...")
-                clear_invalid_documents()
-                insert_default_data()
-                data = load_occupancy_data()
-                date_options = sorted(list(data.keys()))
-                if date_options:
-                    st.experimental_rerun()
-                else:
-                    st.error("Failed to load or insert historical data. Please check MongoDB connection and logs.")
-                    st.write("**Troubleshooting Steps**:")
-                    st.write("1. Verify MongoDB connection in occupancy_dashboard.py.")
-                    st.write("2. Check logs for insertion errors.")
-                    st.write("3. Use 'Clear Invalid Documents and Insert Default Data' button.")
-                    st.write("4. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
+                if clear_invalid_documents():
+                    for _ in range(3):  # Retry up to 3 times
+                        try:
+                            insert_default_data()
+                            data = load_occupancy_data()
+                            date_options = sorted(list(data.keys()))
+                            if date_options:
+                                st.success("Default data inserted successfully")
+                                logger.info("Default data inserted successfully")
+                                st.experimental_rerun()
+                            break
+                        except Exception as e:
+                            st.warning(f"Retry failed: {e}")
+                            logger.error(f"Retry failed for insert_default_data: {e}")
+                    else:
+                        st.error("Failed to insert default data after retries")
+                        logger.error("Failed to insert default data after retries")
+                        st.write("**Troubleshooting Steps**:")
+                        st.write("1. Verify MongoDB connection in occupancy_detection.py.")
+                        st.write("2. Check logs for insertion errors.")
+                        st.write("3. Use 'Clear Invalid Documents and Insert Default Data' button.")
+                        st.write("4. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
         except Exception as e:
             st.error(f"Failed to load historical data: {e}")
             st.write("**Troubleshooting Steps**:")
-            st.write("1. Ensure occupancy_dashboard.py is correctly implemented.")
+            st.write("1. Ensure occupancy_detection.py is correctly implemented.")
             st.write("2. Verify MongoDB connection and collection status.")
             st.write("3. Check for invalid documents using 'Check MongoDB Status'.")
     
@@ -542,6 +567,7 @@ elif page == "Occupancy Dashboard":
                     st.session_state.occ_detection_active = False
                     set_occupancy_detection_state(False)
                     st.experimental_rerun()
+
 
 # Page 4: Tailgating
 elif page == "Tailgating":
