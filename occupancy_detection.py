@@ -600,6 +600,33 @@ occ_model = load_model()
 if occ_model is None:
     st.stop()
 
+# Function to check MongoDB collection status
+def check_collection_status():
+    """Check the status of the MongoDB collection and list all documents"""
+    if occupancy_collection is None:
+        st.error("No MongoDB collection available")
+        return
+    
+    try:
+        count = occupancy_collection.count_documents({})
+        st.write(f"Total documents in collection: {count}")
+        if count == 0:
+            st.warning("No documents found. Inserting default data...")
+            insert_default_data()
+            count = occupancy_collection.count_documents({})
+            st.write(f"After inserting default data, total documents: {count}")
+        
+        st.write("### Documents in Collection")
+        cursor = occupancy_collection.find()
+        for doc in cursor:
+            st.write(f"- Date: {doc.get('date', 'N/A')}, Camera: {doc.get('camera_name', 'N/A')}, "
+                     f"Document ID: {doc.get('document_id', 'N/A')}, "
+                     f"Presence Length: {len(doc.get('presence', []))}, "
+                     f"Hourly Max Counts Length: {len(doc.get('hourly_max_counts', []))}")
+    except Exception as e:
+        logger.error(f"Failed to check collection status: {str(e)}")
+        st.error(f"Failed to check collection status: {str(e)}")
+
 # Function to insert default data for May 4 and May 5, 2025
 def insert_default_data():
     """Insert default occupancy data for May 4 and May 5, 2025, for Cam Road and Cam Hall"""
@@ -612,10 +639,9 @@ def insert_default_data():
     
     for default_date in default_dates:
         for camera_name in cameras:
-            existing_doc = occupancy_collection.find_one({"date": default_date, "camera_name": camera_name})
-            if existing_doc:
-                logger.info(f"Default data for {default_date}, {camera_name} already exists")
-                continue
+            # Delete existing documents to ensure fresh data
+            occupancy_collection.delete_many({"date": default_date, "camera_name": camera_name})
+            logger.info(f"Deleted existing documents for {default_date}, {camera_name}")
             
             # Create sample data
             presence = [0] * 1440  # Minute-by-minute presence (1 or 0)
@@ -782,11 +808,17 @@ def load_occupancy_data(date=None):
     
     try:
         query = {"date": str(date)} if date else {}
+        logger.info(f"Executing query: {query}")
         data = {}
         cursor = occupancy_collection.find(query)
+        doc_count = 0
+        valid_doc_count = 0
+        
         for doc in cursor:
-            if not all(key in doc for key in ['date', 'camera_name', 'presence', 'hourly_max_counts']):
-                logger.warning(f"Skipping invalid document: missing fields in {doc.get('document_id', 'unknown')}")
+            doc_count += 1
+            missing_fields = [key for key in ['date', 'camera_name', 'presence', 'hourly_max_counts'] if key not in doc]
+            if missing_fields:
+                logger.warning(f"Skipping invalid document: missing fields {missing_fields} in {doc.get('document_id', 'unknown')}")
                 continue
             if not isinstance(doc['presence'], list) or len(doc['presence']) != 1440 or \
                not isinstance(doc['hourly_max_counts'], list) or len(doc['hourly_max_counts']) != 24:
@@ -801,7 +833,9 @@ def load_occupancy_data(date=None):
                 'presence': doc['presence'],
                 'hourly_max_counts': doc['hourly_max_counts']
             }
-        logger.info(f"Successfully loaded occupancy data for query: {query}")
+            valid_doc_count += 1
+        
+        logger.info(f"Processed {doc_count} documents, {valid_doc_count} valid for query: {query}")
         return data
     except Exception as e:
         logger.error(f"Failed to load occupancy data: {str(e)}")
@@ -947,7 +981,12 @@ def display_historical_data():
                     st.pyplot(fig)
                     plt.close(fig)
         else:
-            st.error(f"No data found for {selected_date}.")
+            st.error(f"No historical occupancy data available for {selected_date}. "
+                     f"Please check if data exists in MongoDB or try inserting default data.")
+            st.write("**Troubleshooting Steps**:")
+            st.write("1. Use 'Check MongoDB Status' to verify documents.")
+            st.write("2. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
+            st.write("3. Check MongoDB logs for insertion errors.")
 
 # Main application
 def main():
@@ -967,6 +1006,11 @@ def main():
     # Placeholders
     video_placeholder = st.empty()
     stats_placeholder = st.empty()
+    
+    # MongoDB status check interface
+    st.sidebar.header("MongoDB Status")
+    if st.sidebar.button("Check MongoDB Status"):
+        check_collection_status()
     
     # Display historical data interface
     display_historical_data()
