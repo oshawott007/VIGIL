@@ -729,51 +729,36 @@ elif page == "No-Access Rooms":
         st.warning("No-access detection model not available. Please check the model file.")
 
     st.write("Detect and log human presence in restricted areas.")
-    
+        
     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
     
     if view_history:
         st.subheader("Historical No-Access Events")
         
-        # Historical Data Viewing Functionality
-        from no_access_rooms import get_historical_data_by_date, get_available_dates
+        from no_access_rooms import load_no_access_data, get_available_dates
         
         available_dates = get_available_dates()
         if not available_dates:
             st.warning("No historical data available yet")
         else:
-            selected_date = st.selectbox(
-                "Select date to view detections",
-                options=available_dates,
-                index=0
-            )
+            selected_date = st.selectbox("Select date", available_dates)
+            historical_data = load_no_access_data(date_filter=selected_date)
             
-            if st.button("Load Data"):
-                with st.spinner("Loading historical data..."):
-                    historical_data = get_historical_data_by_date(selected_date)
-                    
-                    if not historical_data.empty:
-                        st.success(f"Showing data for {selected_date}")
-                        
-                        # Convert to CSV for download
-                        csv = historical_data.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            label="Download as CSV",
-                            data=csv,
-                            file_name=f"no_access_detections_{selected_date}.csv",
-                            mime='text/csv'
-                        )
-                        
-                        # Display the data
-                        st.dataframe(
-                            historical_data.sort_values('Timestamp', ascending=False),
-                            use_container_width=True,
-                            height=400
-                        )
-                    else:
-                        st.warning(f"No detections found for {selected_date}")
+            if historical_data:
+                st.success(f"Data for {selected_date}")
+                df = pd.DataFrame(historical_data[selected_date])
+                st.dataframe(df)
+                
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "Download CSV",
+                    csv,
+                    f"detections_{selected_date}.csv",
+                    "text/csv"
+                )
+            else:
+                st.warning(f"No data for {selected_date}")
         
-        # Skip the live detection interface when viewing history
         st.stop()
     
     if not st.session_state.cameras:
