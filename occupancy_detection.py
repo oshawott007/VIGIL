@@ -341,10 +341,11 @@
 
 
 
+
 import streamlit as st
 import cv2
 from ultralytics import YOLO
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import numpy as np
 import asyncio
 import logging
@@ -395,6 +396,47 @@ occupancy_collection = init_mongo()
 if occupancy_collection is None:
     st.error("MongoDB connection failed. Cannot proceed with occupancy dashboard.")
     st.stop()
+
+# Function to insert default data for May 5, 2025, Cam Road
+def insert_default_data():
+    """Insert default occupancy data for May 5, 2025, for Cam Road"""
+    if occupancy_collection is None:
+        logger.warning("No MongoDB collection available for inserting default data")
+        return
+    
+    default_date = "2025-05-05"
+    camera_name = "Cam Road"
+    
+    # Check if data already exists
+    existing_doc = occupancy_collection.find_one({"date": default_date, "camera_name": camera_name})
+    if existing_doc:
+        logger.info(f"Default data for {default_date}, {camera_name} already exists")
+        return
+    
+    # Create sample data
+    hourly_counts = [0, 0, 0, 0, 2, 5, 8, 10, 12, 15, 10, 8, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0]
+    minute_counts = [0] * 1440
+    # Simulate some activity from 8:00 to 12:00
+    for minute in range(480, 720):  # 8:00 to 12:00
+        minute_counts[minute] = np.random.randint(0, 15)
+    max_count = max(minute_counts)
+    
+    default_doc = {
+        "date": default_date,
+        "camera_name": camera_name,
+        "max_count": max_count,
+        "hourly_counts": hourly_counts,
+        "minute_counts": minute_counts,
+        "last_updated": datetime(2025, 5, 5, 23, 59, 59),
+        "document_id": str(uuid.uuid4())
+    }
+    
+    try:
+        occupancy_collection.insert_one(default_doc)
+        logger.info(f"Inserted default data for {default_date}, {camera_name}")
+    except Exception as e:
+        logger.error(f"Failed to insert default data: {str(e)}")
+        st.warning(f"Failed to insert default data: {str(e)}")
 
 # Load occupancy detection model
 @st.cache_resource
@@ -455,10 +497,8 @@ def get_today_document(camera_name):
     
     today = datetime.now().date()
     try:
-        # Attempt to find today's document for the camera
         document = occupancy_collection.find_one({"date": str(today), "camera_name": camera_name})
         if not document:
-            # Create new document with default values
             document = {
                 "date": str(today),
                 "camera_name": camera_name,
@@ -466,7 +506,7 @@ def get_today_document(camera_name):
                 "hourly_counts": [0] * 24,
                 "minute_counts": [0] * 1440,
                 "last_updated": datetime.now(),
-                "document_id": str(uuid.uuid4())  # Unique identifier for traceability
+                "document_id": str(uuid.uuid4())
             }
             occupancy_collection.insert_one(document)
             logger.info(f"Created new occupancy document for {today}, camera: {camera_name}")
@@ -539,10 +579,57 @@ def detect_people(frame):
         logger.error(f"Failed to detect people: {str(e)}")
         return frame, 0
 
+# Function to display historical data
+def display_historical_data():
+    """Display historical occupancy data for a selected date and camera"""
+    st.sidebar.header("View Historical Data")
+    selected_date = st.sidebar.date_input("Select Date", value=date(2025, 5, 5))
+    camera_options = st.session_state.get('occ_selected_cameras', ["Cam Road"])
+    selected_camera = st.sidebar.selectbox("Select Camera", camera_options, index=0)
+    
+    if st.sidebar.button("Load Historical Data"):
+        historical_data = load_occupancy_data(date=selected_date, camera_name=selected_camera)
+        date_str = str(selected_date)
+        
+        if date_str in historical_data and selected_camera in historical_data[date_str]:
+            data = historical_data[date_str][selected_camera]
+            st.subheader(f"Occupancy Data for {selected_camera} on {selected_date}")
+            
+            # Display max count
+            st.metric("Maximum Occupancy", data['max_count'])
+            
+            # Plot hourly counts
+            fig, ax = plt.subplots()
+            hours = [f"{h}:00" for h in range(24)]
+            ax.plot(hours, data['hourly_counts'], marker='o', color='orange')
+            ax.set_title(f"Hourly Maximum Occupancy - {selected_camera}")
+            ax.set_xlabel("Hour of Day")
+            ax.set_ylabel("Maximum People Count")
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+            plt.close(fig)
+            
+            # Plot minute counts
+            fig, ax = plt.subplots(figsize=(10, 4))
+            minutes = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 15)]
+            ax.plot(range(1440), data['minute_counts'], linewidth=1, color='orange')
+            ax.set_title(f"Minute-by-Minute Presence - {selected_camera}")
+            ax.set_xlabel("Time (24h)")
+            ax.set_ylabel("People Count")
+            ax.set_xticks(range(0, 1440, 15*4))
+            ax.set_xticklabels(minutes[::4], rotation=45)
+            st.pyplot(fig)
+            plt.close(fig)
+        else:
+            st.error(f"No data found for {selected_camera} on {selected_date}.")
+
 # Async function for occupancy detection loop
 async def occupancy_detection_loop(video_placeholder, stats_placeholder, 
                                  hourly_chart_placeholder, minute_chart_placeholder):
     """Main occupancy detection loop"""
+    # Insert default data for May 5, 2025, Cam Road
+    insert_default_data()
+    
     caps = {}
     frame_counter = 0
     frame_skip = 5  # Run inference every 5th frame
@@ -681,3 +768,48 @@ async def occupancy_detection_loop(video_placeholder, stats_placeholder,
                 logger.error(f"Failed to release camera: {e}")
         cv2.destroyAllWindows()
         logger.info("Camera resources released")
+
+# Main application
+def main():
+    # Ensure Cam Road is in the list of cameras
+    if 'occ_selected_cameras' not in st.session_state:
+        st.session_state.occ_selected_cameras = ["Cam Road"]
+    if 'cameras' not in st.session_state:
+        st.session_state.cameras = [{"name": "Cam Road", "address": "0"}]  # Dummy address for testing
+    
+    # Initialize session state variables
+    if 'occ_detection_active' not in st.session_state:
+        st.session_state.occ_detection_active = False
+    if 'occ_current_count' not in st.session_state:
+        st.session_state.occ_current_count = 0
+    if 'occ_max_count' not in st.session_state:
+        st.session_state.occ_max_count = 0
+    if 'occ_hourly_counts' not in st.session_state:
+        st.session_state.occ_hourly_counts = [0] * 24
+    if 'occ_minute_counts' not in st.session_state:
+        st.session_state.occ_minute_counts = [0] * 1440
+    
+    st.title("Occupancy Dashboard")
+    
+    # Placeholders for video and stats
+    video_placeholder = st.empty()
+    stats_placeholder = st.empty()
+    hourly_chart_placeholder = st.empty()
+    minute_chart_placeholder = st.empty()
+    
+    # Display historical data interface
+    display_historical_data()
+    
+    # Start/stop detection button
+    if st.button("Start/Stop Detection"):
+        st.session_state.occ_detection_active = not st.session_state.occ_detection_active
+    
+    # Run detection loop if active
+    if st.session_state.occ_detection_active:
+        asyncio.run(occupancy_detection_loop(
+            video_placeholder, stats_placeholder,
+            hourly_chart_placeholder, minute_chart_placeholder
+        ))
+
+if __name__ == "__main__":
+    main()
