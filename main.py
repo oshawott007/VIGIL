@@ -440,7 +440,7 @@ elif page == "Occupancy Dashboard":
         st.subheader("🎬 Occupancy Detection Controls")
         col1, col2 = st.columns(2)
         with col1:
-            from occupancy_dashboard import occ_model
+            from occupancy_detection import occ_model
             if st.button("👥 Start Occupancy Tracking", 
                         disabled=st.session_state.occ_detection_active or not st.session_state.occ_selected_cameras or occ_model is None,
                         help="Start monitoring selected cameras for people counting",
