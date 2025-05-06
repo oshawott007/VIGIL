@@ -326,114 +326,6 @@ elif page == "Fire Detection":
         st.write("2. Send any message to the bot")
         st.write("3. The bot will reply with your chat ID")
         
-
-
-# Page 3: Occupancy Dashboard
-# elif page == "Occupancy Dashboard":
-#     st.header("👥 Occupancy Dashboard")
-#     st.write("Track and display occupancy counts in monitored areas.")
-    
-#     view_history = st.checkbox("View Historical Data", key="view_occupancy_history")
-    
-#     if view_history:
-#         st.subheader("Historical Data")
-#         try:
-#             data = load_occupancy_data()
-#             date_options = sorted(list(data.keys()))
-#             if date_options:
-#                 selected_date = st.selectbox("Select Date", date_options, key="occupancy_date_select")
-#                 if selected_date:
-#                     doc = data[selected_date]
-#                     st.write(f"Maximum occupancy on {selected_date}: {doc['max_count']}")
-                    
-#                     hist_fig, hist_ax = plt.subplots()
-#                     hours = [f"{h}:00" for h in range(24)]
-#                     hist_ax.plot(hours, doc["hourly_counts"], marker='o', color='orange')
-#                     hist_ax.set_title(f"Hourly Maximum Occupancy on {selected_date}")
-#                     hist_ax.set_xlabel("Hour of Day")
-#                     hist_ax.set_ylabel("Maximum People Count")
-#                     plt.xticks(rotation=45)
-#                     st.pyplot(hist_fig)
-#                     plt.close(hist_fig)
-                    
-#                     hist_fig, hist_ax = plt.subplots(figsize=(10, 4))
-#                     minutes = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 15)]
-#                     hist_ax.plot(range(1440), doc["minute_counts"], linewidth=1, color='orange')
-#                     hist_ax.set_title(f"Minute-by-Minute Presence on {selected_date}")
-#                     hist_ax.set_xlabel("Time (24h)")
-#                     hist_ax.set_ylabel("People Count")
-#                     hist_ax.set_xticks(range(0, 1440, 15*4))
-#                     hist_ax.set_xticklabels(minutes[::4], rotation=45)
-#                     st.pyplot(hist_fig)
-#                     plt.close(hist_fig)
-#             else:
-#                 st.info("No historical occupancy data available")
-#         except Exception as e:
-#             st.error(f"Failed to load historical data: {e}")
-    
-#     if not st.session_state.cameras:
-#         st.warning("Please add cameras first in the Camera Management tab")
-#     else:
-#         st.subheader("📋 Available Cameras")
-#         selected = st.multiselect(
-#             "Select cameras for occupancy monitoring",
-#             [cam['name'] for cam in st.session_state.cameras],
-#             default=st.session_state.occ_selected_cameras,
-#             key="occupancy_cameras"
-#         )
-#         if selected != st.session_state.occ_selected_cameras:
-#             st.session_state.occ_selected_cameras = selected
-#             save_selected_cameras(occupancy_settings_collection, selected)
-        
-#         # Show selected cameras only when detection is active
-#         if st.session_state.occ_detection_active and st.session_state.occ_selected_cameras:
-#             st.subheader("✅ Active Cameras")
-#             cols = st.columns(3)
-#             for i, cam_name in enumerate(st.session_state.occ_selected_cameras):
-#                 with cols[i % 3]:
-#                     st.success(f"🔴 LIVE: {cam_name}")
-        
-#         st.markdown("---")
-#         st.subheader("🎬 Occupancy Detection Controls")
-#         col1, col2 = st.columns(2)
-#         with col1:
-#             from occupancy_detection import occ_model
-#             if st.button("👥 Start Occupancy Tracking", 
-#                         disabled=st.session_state.occ_detection_active or not st.session_state.occ_selected_cameras or occ_model is None,
-#                         help="Start monitoring selected cameras for people counting",
-#                         key="start_occupancy_tracking"):
-#                 st.session_state.occ_detection_active = True
-#                 st.rerun()  # Force refresh to show the active cameras
-#         with col2:
-#             if st.button("⏹️ Stop Tracking", 
-#                         disabled=not st.session_state.occ_detection_active,
-#                         key="stop_occupancy_tracking"):
-#                 st.session_state.occ_detection_active = False
-#                 st.rerun()  # Force refresh to update the UI
-        
-#         if st.session_state.occ_selected_cameras and st.session_state.occ_detection_active:
-#             st.subheader("📺 Live Feeds with Occupancy Count")
-#             video_placeholder = st.empty()
-        
-#         stats_placeholder = st.empty()
-#         hourly_chart_placeholder = st.empty()
-#         minute_chart_placeholder = st.empty()
-        
-#         if st.session_state.occ_detection_active:
-#             from occupancy_detection import occ_model
-#             if occ_model is None:
-#                 st.error("Occupancy detection model not available")
-#             else:
-#                 try:
-#                     asyncio.run(occupancy_detection_loop(
-#                         video_placeholder, stats_placeholder,
-#                         hourly_chart_placeholder, minute_chart_placeholder
-#                     ))
-#                 except Exception as e:
-#                     st.error(f"Occupancy detection failed: {e}")
-#                     st.session_state.occ_detection_active = False
-#                     st.rerun()
-
 # Page 3: Occupancy Dashboard
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
@@ -683,7 +575,8 @@ elif page == "Tailgating":
 
 
 
-# # Page 5: No-Access Rooms
+
+# Page 5: No-Access Rooms
 # elif page == "No-Access Rooms":
 #     st.header("🔒 No-Access Rooms Detection")
     
@@ -713,6 +606,14 @@ elif page == "Tailgating":
 #         st.session_state.no_access_detection_active = current_db_state
 #         st.experimental_rerun()
 
+#     # Check model availability
+#     try:
+#         from no_access_rooms import no_access_model
+#         model_available = no_access_model is not None
+#     except (ImportError, AttributeError):
+#         model_available = False
+#         st.warning("No-access detection model not available. Please check the model file.")
+
 #     st.write("Detect and log human presence in restricted areas.")
     
 #     view_history = st.checkbox("View Historical Data", key="view_no_access_history")
@@ -720,82 +621,7 @@ elif page == "Tailgating":
 #     if view_history:
 #         st.subheader("Historical No-Access Events")
         
-#         # Add view options (by date or month)
-#         view_option = st.radio("View by:", ["Date", "Month"], key="no_access_view_option")
-        
-#         if view_option == "Date":
-#             available_dates = get_available_dates()
-#             if available_dates:
-#                 selected_date = st.selectbox("Select Date", available_dates, key="no_access_date_select")
-#                 if selected_date:
-#                     data = load_no_access_data(date_filter=selected_date)
-#                     if data and selected_date in data:
-#                         events = data[selected_date]
-#                         df = pd.DataFrame(events)
-#                         df['timestamp'] = pd.to_datetime(df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                        
-#                         st.write(f"No-access events on {selected_date}:")
-#                         st.dataframe(df)
-                        
-#                         # Show snapshots if available
-#                         if 'has_snapshot' in df.columns:
-#                             selected_event = st.selectbox("View snapshot for event:", 
-#                                                          df['timestamp'].tolist(),
-#                                                          key="no_access_event_select")
-#                             if selected_event:
-#                                 event_data = no_access_collection.find_one({
-#                                     'date': selected_date,
-#                                     'timestamp': datetime.strptime(selected_event, '%Y-%m-%d %H:%M:%S')
-#                                 })
-#                                 if event_data and 'snapshot' in event_data:
-#                                     snapshot = cv2.imdecode(np.frombuffer(event_data['snapshot'], cv2.IMREAD_COLOR))
-#                                     st.image(snapshot, channels="BGR", caption=f"Snapshot from {selected_event}")
-#                     else:
-#                         st.info(f"No no-access events recorded on {selected_date}")
-#             else:
-#                 st.info("No no-access events recorded yet")
-                
-#         else:  # Month view
-#             available_months = get_available_months()
-#             if available_months:
-#                 selected_month = st.selectbox("Select Month", available_months, key="no_access_month_select")
-#                 if selected_month:
-#                     data = load_no_access_data(month_filter=selected_month)
-#                     if data:
-#                         # Create summary statistics
-#                         all_events = []
-#                         for date_events in data.values():
-#                             all_events.extend(date_events)
-                        
-#                         df = pd.DataFrame(all_events)
-#                         df['timestamp'] = pd.to_datetime(df['timestamp'])
-#                         df['date'] = df['timestamp'].dt.date
-                        
-#                         st.write(f"No-access events summary for {selected_month}:")
-                        
-#                         # Show daily counts
-#                         daily_counts = df.groupby('date').agg({
-#                             'num_people': 'sum',
-#                             'camera_name': 'count'
-#                         }).rename(columns={
-#                             'num_people': 'Total People Detected',
-#                             'camera_name': 'Event Count'
-#                         })
-#                         st.bar_chart(daily_counts['Event Count'])
-                        
-#                         # Show camera-wise distribution
-#                         st.write("Camera-wise distribution:")
-#                         cam_counts = df.groupby('camera_name').size().reset_index(name='Count')
-#                         st.bar_chart(cam_counts.set_index('camera_name'))
-                        
-#                         # Show detailed events
-#                         st.write("Detailed events:")
-#                         df['timestamp'] = df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-#                         st.dataframe(df[['timestamp', 'num_people', 'camera_name']])
-#                     else:
-#                         st.info(f"No no-access events recorded in {selected_month}")
-#             else:
-#                 st.info("No no-access events recorded yet")
+#         # [Rest of your historical data view code remains the same...]
     
 #     if not st.session_state.cameras:
 #         st.warning("Please add cameras first in the Camera Management tab")
@@ -826,12 +652,17 @@ elif page == "Tailgating":
 #         col1, col2 = st.columns(2)
 #         with col1:
 #             if st.button("🔒 Start No-Access Detection", 
-#                         disabled=st.session_state.no_access_detection_active or not st.session_state.no_access_selected_cameras or no_access_model is None,
+#                         disabled=(st.session_state.no_access_detection_active or 
+#                                  not st.session_state.no_access_selected_cameras or 
+#                                  not model_available),
 #                         help="Start monitoring selected cameras for human presence",
 #                         key="start_no_access_detection"):
-#                 st.session_state.no_access_detection_active = True
-#                 set_no_access_detection_state(True)
-#                 st.experimental_rerun()
+#                 if not model_available:
+#                     st.error("Detection model not available - cannot start monitoring")
+#                 else:
+#                     st.session_state.no_access_detection_active = True
+#                     set_no_access_detection_state(True)
+#                     st.experimental_rerun()
 #         with col2:
 #             if st.button("⏹️ Stop Detection", 
 #                         disabled=not st.session_state.no_access_detection_active,
@@ -846,14 +677,20 @@ elif page == "Tailgating":
 #             table_placeholder = st.empty()
         
 #             if st.session_state.no_access_detection_active:
-#                 if no_access_model is None:
+#                 if not model_available:
 #                     video_placeholder.error("No-access detection model not available")
 #                 else:
-#                     selected_cams = [cam for cam in st.session_state.cameras 
-#                                    if cam['name'] in st.session_state.no_access_selected_cameras]
-#                     asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+#                     try:
+#                         from no_access_rooms import no_access_detection_loop
+#                         selected_cams = [cam for cam in st.session_state.cameras 
+#                                        if cam['name'] in st.session_state.no_access_selected_cameras]
+#                         asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cams))
+#                     except Exception as e:
+#                         video_placeholder.error(f"Failed to start detection: {str(e)}")
+#                         st.session_state.no_access_detection_active = False
+#                         set_no_access_detection_state(False)
+#                         st.experimental_rerun()
 
-# Page 5: No-Access Rooms
 elif page == "No-Access Rooms":
     st.header("🔒 No-Access Rooms Detection")
     
@@ -898,7 +735,46 @@ elif page == "No-Access Rooms":
     if view_history:
         st.subheader("Historical No-Access Events")
         
-        # [Rest of your historical data view code remains the same...]
+        # Historical Data Viewing Functionality
+        from no_access_rooms import get_historical_data_by_date, get_available_dates
+        
+        available_dates = get_available_dates()
+        if not available_dates:
+            st.warning("No historical data available yet")
+        else:
+            selected_date = st.selectbox(
+                "Select date to view detections",
+                options=available_dates,
+                index=0
+            )
+            
+            if st.button("Load Data"):
+                with st.spinner("Loading historical data..."):
+                    historical_data = get_historical_data_by_date(selected_date)
+                    
+                    if not historical_data.empty:
+                        st.success(f"Showing data for {selected_date}")
+                        
+                        # Convert to CSV for download
+                        csv = historical_data.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="Download as CSV",
+                            data=csv,
+                            file_name=f"no_access_detections_{selected_date}.csv",
+                            mime='text/csv'
+                        )
+                        
+                        # Display the data
+                        st.dataframe(
+                            historical_data.sort_values('Timestamp', ascending=False),
+                            use_container_width=True,
+                            height=400
+                        )
+                    else:
+                        st.warning(f"No detections found for {selected_date}")
+        
+        # Skip the live detection interface when viewing history
+        st.stop()
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
