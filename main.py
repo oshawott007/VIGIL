@@ -363,7 +363,7 @@ elif page == "Occupancy Dashboard":
     if view_history:
         st.subheader("Historical Data")
         try:
-            from occupancy_dashboard import load_occupancy_data, plot_presence_clock, plot_hourly_occupancy, insert_default_data
+            from occupancy_detection import load_occupancy_data, plot_presence_clock, plot_hourly_occupancy, insert_default_data
             data = load_occupancy_data()
             date_options = sorted(list(data.keys()))
             if date_options:
@@ -403,13 +403,13 @@ elif page == "Occupancy Dashboard":
                 else:
                     st.error("Failed to load or insert historical data. Please check MongoDB connection and logs.")
                     st.write("**Troubleshooting Steps**:")
-                    st.write("1. Verify MongoDB connection in occupancy_dashboard.py.")
+                    st.write("1. Verify MongoDB connection in occupancy_detection.py.")
                     st.write("2. Check logs for insertion errors.")
                     st.write("3. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
         except Exception as e:
             st.error(f"Failed to load historical data: {e}")
             st.write("**Troubleshooting Steps**:")
-            st.write("1. Ensure occupancy_dashboard.py is correctly implemented.")
+            st.write("1. Ensure occupancy_detection.py is correctly implemented.")
             st.write("2. Verify MongoDB connection and collection status.")
     
     if not st.session_state.cameras:
@@ -463,7 +463,7 @@ elif page == "Occupancy Dashboard":
         stats_placeholder = st.empty()
         
         if st.session_state.occ_detection_active:
-            from occupancy_dashboard import occ_model, occupancy_detection_loop
+            from occupancy_detection import occ_model, occupancy_detection_loop
             if occ_model is None:
                 st.error("Occupancy detection model not available")
             else:
