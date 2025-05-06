@@ -470,7 +470,6 @@
 # if __name__ == "__main__":
 #     main()
 
-
 import streamlit as st
 import cv2
 from ultralytics import YOLO
@@ -572,7 +571,6 @@ def insert_default_data():
 def load_model():
     try:
         model = YOLO('yolov8n.onnx')
-cijas
         logger.info("Occupancy detection model loaded successfully")
         return model
     except Exception as e:
@@ -778,7 +776,7 @@ async def occupancy_detection_loop(video_placeholder, stats_placeholder,
     
     # Initialize video captures
     for cam_name in st.session_state.occ_selected_cameras:
-        cam_address = next((cam['address'] for cam in=st.session_state.cameras 
+        cam_address = next((cam['address'] for cam in st.session_state.cameras 
                           if cam['name'] == cam_name), None)
         if cam_address:
             try:
