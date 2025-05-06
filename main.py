@@ -18,7 +18,7 @@ from no_access_rooms import no_access_detection_loop, load_no_access_data
 
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__
+logger = logging.getLogger(__name__)
 # MongoDB Atlas connection
 MONGO_URI = "mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
