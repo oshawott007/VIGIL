@@ -327,6 +327,7 @@ elif page == "Fire Detection":
         st.write("3. The bot will reply with your chat ID")
         
 # Page 3: Occupancy Dashboard
+# Page 3: Occupancy Dashboard
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
     
@@ -346,6 +347,57 @@ elif page == "Occupancy Dashboard":
             upsert=True
         )
     
+    # Function to clear invalid documents
+    def clear_invalid_documents():
+        from occupancy_detection import occupancy_collection
+        if occupancy_collection is None:
+            st.error("No MongoDB collection available")
+            return False
+        try:
+            result = occupancy_collection.delete_many({
+                "$or": [
+                    {"camera_name": {"$exists": False}},
+                    {"presence": {"$exists": False}},
+                    {"hourly_max_counts": {"$exists": False}},
+                    {"presence": {"$not": {"$size": 1440}}},
+                    {"hourly_max_counts": {"$not": {"$size": 24}}}
+                ]
+            })
+            st.success(f"Deleted {result.deleted_count} invalid documents")
+            logger.info(f"Deleted {result.deleted_count} invalid documents")
+            return True
+        except Exception as e:
+            st.error(f"Failed to clear invalid documents: {e}")
+            logger.error(f"Failed to clear invalid documents: {e}")
+            return False
+    
+    # Function to check MongoDB collection status
+    def check_collection_status():
+        from occupancy_detection import occupancy_collection
+        if occupancy_collection is None:
+            st.error("No MongoDB collection available")
+            return
+        try:
+            count = occupancy_collection.count_documents({})
+            st.write(f"Total documents in collection: {count}")
+            if count == 0:
+                st.warning("No documents found. Inserting default data...")
+                from occupancy_detection import insert_default_data
+                insert_default_data()
+                count = occupancy_collection.count_documents({})
+                st.write(f"After inserting default data, total documents: {count}")
+            
+            st.write("### Documents in Collection")
+            cursor = occupancy_collection.find()
+            for doc in cursor:
+                st.write(f"- Date: {doc.get('date', 'N/A')}, Camera: {doc.get('camera_name', 'N/A')}, "
+                         f"Document ID: {doc.get('document_id', 'N/A')}, "
+                         f"Presence Length: {len(doc.get('presence', []))}, "
+                         f"Hourly Max Counts Length: {len(doc.get('hourly_max_counts', []))}")
+        except Exception as e:
+            st.error(f"Failed to check collection status: {e}")
+            logger.error(f"Failed to check collection status: {e}")
+    
     # Initialize session state from DB
     if 'occ_detection_active' not in st.session_state:
         st.session_state.occ_detection_active = get_occupancy_detection_state()
@@ -357,6 +409,17 @@ elif page == "Occupancy Dashboard":
         st.experimental_rerun()
 
     st.write("Track and display occupancy counts in monitored areas.")
+    
+    # MongoDB status and cleanup interface
+    st.sidebar.header("MongoDB Status")
+    if st.sidebar.button("Check MongoDB Status"):
+        check_collection_status()
+    if st.sidebar.button("Clear Invalid Documents and Insert Default Data"):
+        if clear_invalid_documents():
+            from occupancy_detection import insert_default_data
+            insert_default_data()
+            st.success("Default data inserted for 2025-05-04 and 2025-05-05")
+            st.experimental_rerun()
     
     view_history = st.checkbox("View Historical Data", key="view_occupancy_history")
     
@@ -395,6 +458,7 @@ elif page == "Occupancy Dashboard":
                     st.error(f"No data found for {selected_date}.")
             else:
                 st.warning("No historical occupancy data available. Attempting to insert default data...")
+                clear_invalid_documents()
                 insert_default_data()
                 data = load_occupancy_data()
                 date_options = sorted(list(data.keys()))
@@ -403,14 +467,16 @@ elif page == "Occupancy Dashboard":
                 else:
                     st.error("Failed to load or insert historical data. Please check MongoDB connection and logs.")
                     st.write("**Troubleshooting Steps**:")
-                    st.write("1. Verify MongoDB connection in occupancy_detection.py.")
+                    st.write("1. Verify MongoDB connection in occupancy_dashboard.py.")
                     st.write("2. Check logs for insertion errors.")
-                    st.write("3. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
+                    st.write("3. Use 'Clear Invalid Documents and Insert Default Data' button.")
+                    st.write("4. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
         except Exception as e:
             st.error(f"Failed to load historical data: {e}")
             st.write("**Troubleshooting Steps**:")
-            st.write("1. Ensure occupancy_detection.py is correctly implemented.")
+            st.write("1. Ensure occupancy_dashboard.py is correctly implemented.")
             st.write("2. Verify MongoDB connection and collection status.")
+            st.write("3. Check for invalid documents using 'Check MongoDB Status'.")
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
