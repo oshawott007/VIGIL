@@ -333,6 +333,7 @@ elif page == "Fire Detection":
         
 # Page 3: Occupancy Dashboard
 #######################################
+# Page 3: Occupancy Dashboard
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
     
@@ -343,19 +344,20 @@ elif page == "Occupancy Dashboard":
     def set_occupancy_detection_state(active):
         st.session_state.occ_detection_active = active
     
-    # JSON file path
-    JSON_FILE = "occupancy_data.json"
+    # JSON file paths
+    OCCUPANCY_JSON_FILE = "occupancy_data.json"
+    SETTINGS_JSON_FILE = "settings.json"
     
     # Function to load data from JSON
     def load_occupancy_data(date=None):
         try:
-            if not os.path.exists(JSON_FILE):
-                logger.info(f"No JSON file found at {JSON_FILE}. Creating empty file.")
-                with open(JSON_FILE, 'w') as f:
+            if not os.path.exists(OCCUPANCY_JSON_FILE):
+                logger.info(f"No JSON file found at {OCCUPANCY_JSON_FILE}. Creating empty file.")
+                with open(OCCUPANCY_JSON_FILE, 'w') as f:
                     json.dump({}, f)
                 return {}
             
-            with open(JSON_FILE, 'r') as f:
+            with open(OCCUPANCY_JSON_FILE, 'r') as f:
                 data = json.load(f)
             
             # Validate data structure
@@ -381,6 +383,23 @@ elif page == "Occupancy Dashboard":
                 date_str = str(date)
                 return {date_str: validated_data.get(date_str, {})} if date_str in validated_data else {}
             return validated_data
+        except json.JSONDecodeError as e:
+            st.error(f"Failed to parse JSON data: {e}")
+            logger.error(f"Failed to parse JSON data: {e}")
+            try:
+                with open(OCCUPANCY_JSON_FILE, 'r') as f:
+                    invalid_content = f.read()
+                logger.error(f"Invalid JSON content: {invalid_content}")
+            except Exception as read_e:
+                logger.error(f"Failed to read invalid JSON file: {read_e}")
+            # Reset file to empty
+            try:
+                with open(OCCUPANCY_JSON_FILE, 'w') as f:
+                    json.dump({}, f)
+                logger.info("Reset JSON file to empty due to parsing error")
+            except Exception as write_e:
+                logger.error(f"Failed to reset JSON file: {write_e}")
+            return {}
         except Exception as e:
             st.error(f"Failed to load JSON data: {e}")
             logger.error(f"Failed to load JSON data: {e}")
@@ -388,66 +407,69 @@ elif page == "Occupancy Dashboard":
     
     # Function to insert default data into JSON
     def insert_default_data():
-        try:
-            data = load_occupancy_data()
-            default_dates = ["2025-05-04", "2025-05-05"]
-            cameras = ["Cam Road", "Cam Hall"]
-            
-            for default_date in default_dates:
-                if default_date not in data:
-                    data[default_date] = {}
-                for camera_name in cameras:
-                    # Skip if valid data already exists
-                    if (default_date in data and camera_name in data[default_date] and
-                        isinstance(data[default_date][camera_name].get('presence'), list) and
-                        len(data[default_date][camera_name]['presence']) == 1440 and
-                        isinstance(data[default_date][camera_name].get('hourly_max_counts'), list) and
-                        len(data[default_date][camera_name]['hourly_max_counts']) == 24):
-                        logger.info(f"Default data for {default_date}, {camera_name} already exists")
-                        continue
-                    
-                    # Create sample data
-                    presence = [0] * 1440
-                    hourly_max_counts = [0] * 24
-                    
-                    if default_date == "2025-05-04":
-                        for minute in range(420, 660):  # 7:00 to 11:00
-                            presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])
-                        for minute in range(900, 1080):  # 15:00 to 18:00
-                            presence[minute] = np.random.choice([0, 1], p=[0.5, 0.5])
-                        for hour in range(24):
-                            max_count = max(np.random.randint(0, 8, size=10)) if hour in range(7, 11) or hour in range(15, 18) else 0
-                            hourly_max_counts[hour] = max_count
-                    else:  # 2025-05-05
-                        for minute in range(480, 720):  # 8:00 to 12:00
-                            presence[minute] = np.random.choice([0, 1], p=[0.3, 0.7])
-                        for minute in range(840, 1020):  # 14:00 to 17:00
-                            presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])
-                        for hour in range(24):
-                            max_count = max(np.random.randint(0, 10, size=10)) if hour in range(8, 12) or hour in range(14, 17) else 0
-                            hourly_max_counts[hour] = max_count
-                    
-                    data[default_date][camera_name] = {
-                        "presence": presence,
-                        "hourly_max_counts": hourly_max_counts
-                    }
-            
-            with open(JSON_FILE, 'w') as f:
-                json.dump(data, f, indent=2)
-            logger.info("Default data inserted into JSON file")
-            return True
-        except Exception as e:
-            st.error(f"Failed to insert default data: {e}")
-            logger.error(f"Failed to insert default data: {e}")
-            return False
+        for _ in range(3):  # Retry up to 3 times
+            try:
+                data = load_occupancy_data()
+                default_dates = ["2025-05-04", "2025-05-05"]
+                cameras = ["Cam Road", "Cam Hall"]
+                
+                for default_date in default_dates:
+                    if default_date not in data:
+                        data[default_date] = {}
+                    for camera_name in cameras:
+                        # Skip if valid data already exists
+                        if (default_date in data and camera_name in data[default_date] and
+                            isinstance(data[default_date][camera_name].get('presence'), list) and
+                            len(data[default_date][camera_name]['presence']) == 1440 and
+                            isinstance(data[default_date][camera_name].get('hourly_max_counts'), list) and
+                            len(data[default_date][camera_name]['hourly_max_counts']) == 24):
+                            logger.info(f"Default data for {default_date}, {camera_name} already exists")
+                            continue
+                        
+                        # Create sample data
+                        presence = [0] * 1440
+                        hourly_max_counts = [0] * 24
+                        
+                        if default_date == "2025-05-04":
+                            for minute in range(420, 660):  # 7:00 to 11:00
+                                presence[minute] = int(np.random.choice([0, 1], p=[0.4, 0.6]))
+                            for minute in range(900, 1080):  # 15:00 to 18:00
+                                presence[minute] = int(np.random.choice([0, 1], p=[0.5, 0.5]))
+                            for hour in range(24):
+                                max_count = int(max(np.random.randint(0, 8, size=10))) if hour in range(7, 11) or hour in range(15, 18) else 0
+                                hourly_max_counts[hour] = max_count
+                        else:  # 2025-05-05
+                            for minute in range(480, 720):  # 8:00 to 12:00
+                                presence[minute] = int(np.random.choice([0, 1], p=[0.3, 0.7]))
+                            for minute in range(840, 1020):  # 14:00 to 17:00
+                                presence[minute] = int(np.random.choice([0, 1], p=[0.4, 0.6]))
+                            for hour in range(24):
+                                max_count = int(max(np.random.randint(0, 10, size=10))) if hour in range(8, 12) or hour in range(14, 17) else 0
+                                hourly_max_counts[hour] = max_count
+                        
+                        data[default_date][camera_name] = {
+                            "presence": presence,
+                            "hourly_max_counts": hourly_max_counts
+                        }
+                
+                with open(OCCUPANCY_JSON_FILE, 'w') as f:
+                    json.dump(data, f, indent=2)
+                logger.info("Default data inserted into JSON file")
+                return True
+            except Exception as e:
+                st.warning(f"Retry failed to insert default data: {e}")
+                logger.error(f"Retry failed to insert default data: {e}")
+        st.error("Failed to insert default data after retries")
+        logger.error("Failed to insert default data after retries")
+        return False
     
     # Function to clear invalid data from JSON
     def clear_invalid_data():
         try:
-            if os.path.exists(JSON_FILE):
-                os.remove(JSON_FILE)
-                logger.info(f"Deleted {JSON_FILE}")
-            with open(JSON_FILE, 'w') as f:
+            if os.path.exists(OCCUPANCY_JSON_FILE):
+                os.remove(OCCUPANCY_JSON_FILE)
+                logger.info(f"Deleted {OCCUPANCY_JSON_FILE}")
+            with open(OCCUPANCY_JSON_FILE, 'w') as f:
                 json.dump({}, f)
             st.success("Cleared invalid data and reset JSON file")
             logger.info("Cleared invalid data and reset JSON file")
@@ -457,9 +479,69 @@ elif page == "Occupancy Dashboard":
             logger.error(f"Failed to clear invalid data: {e}")
             return False
     
+    # Function to save selected cameras to JSON
+    def save_selected_cameras(selected):
+        try:
+            if not os.path.exists(SETTINGS_JSON_FILE):
+                with open(SETTINGS_JSON_FILE, 'w') as f:
+                    json.dump({}, f)
+            with open(SETTINGS_JSON_FILE, 'r') as f:
+                settings = json.load(f)
+            settings['selected_cameras'] = selected
+            with open(SETTINGS_JSON_FILE, 'w') as f:
+                json.dump(settings, f, indent=2)
+            logger.info("Saved selected cameras to settings.json")
+        except Exception as e:
+            st.error(f"Failed to save selected cameras: {e}")
+            logger.error(f"Failed to save selected cameras: {e}")
+    
+    # Function to load selected cameras from JSON
+    def load_selected_cameras():
+        try:
+            if not os.path.exists(SETTINGS_JSON_FILE):
+                return []
+            with open(SETTINGS_JSON_FILE, 'r') as f:
+                settings = json.load(f)
+            return settings.get('selected_cameras', [])
+        except Exception as e:
+            logger.error(f"Failed to load selected cameras: {e}")
+            return []
+    
+    # Function to update real-time occupancy data in JSON
+    def update_occupancy_data_json(camera_name, presence, hourly_max_counts, current_count, current_minute, current_hour):
+        try:
+            data = load_occupancy_data()
+            today = str(datetime.now().date())
+            
+            if today not in data:
+                data[today] = {}
+            if camera_name not in data[today]:
+                data[today][camera_name] = {
+                    "presence": [0] * 1440,
+                    "hourly_max_counts": [0] * 24
+                }
+            
+            # Update presence and hourly max counts
+            data[today][camera_name]['presence'][current_minute] = 1 if current_count > 0 else data[today][camera_name]['presence'][current_minute]
+            data[today][camera_name]['hourly_max_counts'][current_hour] = max(
+                data[today][camera_name]['hourly_max_counts'][current_hour], int(current_count)
+            )
+            
+            # Atomic write to prevent corruption
+            with open(OCCUPANCY_JSON_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info(f"Updated real-time data for {today}, {camera_name}")
+            return data[today][camera_name]['presence'], data[today][camera_name]['hourly_max_counts']
+        except Exception as e:
+            st.warning(f"Failed to update real-time data for {camera_name}: {e}")
+            logger.error(f"Failed to update real-time data for {camera_name}: {e}")
+            return presence, hourly_max_counts
+    
     # Initialize session state
     if 'occ_detection_active' not in st.session_state:
         st.session_state.occ_detection_active = get_occupancy_detection_state()
+    if 'occ_selected_cameras' not in st.session_state:
+        st.session_state.occ_selected_cameras = load_selected_cameras()
     
     # Force sync (no DB, just session state)
     current_state = get_occupancy_detection_state()
@@ -549,7 +631,7 @@ elif page == "Occupancy Dashboard":
         )
         if selected != st.session_state.occ_selected_cameras:
             st.session_state.occ_selected_cameras = selected
-            save_selected_cameras(occupancy_settings_collection, selected)
+            save_selected_cameras(selected)
         
         # Show active status and cameras
         if st.session_state.occ_detection_active:
@@ -594,7 +676,7 @@ elif page == "Occupancy Dashboard":
             else:
                 try:
                     asyncio.run(occupancy_detection_loop(
-                        video_placeholder, stats_placeholder
+                        video_placeholder, stats_placeholder, update_occupancy_data_json
                     ))
                 except Exception as e:
                     st.error(f"Occupancy detection failed: {e}")
