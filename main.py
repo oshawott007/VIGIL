@@ -363,38 +363,54 @@ elif page == "Occupancy Dashboard":
     if view_history:
         st.subheader("Historical Data")
         try:
+            from occupancy_dashboard import load_occupancy_data, plot_presence_clock, plot_hourly_occupancy, insert_default_data
             data = load_occupancy_data()
             date_options = sorted(list(data.keys()))
             if date_options:
                 selected_date = st.selectbox("Select Date", date_options, key="occupancy_date_select")
-                if selected_date:
-                    doc = data[selected_date]
-                    st.write(f"Maximum occupancy on {selected_date}: {doc['max_count']}")
-                    
-                    hist_fig, hist_ax = plt.subplots()
-                    hours = [f"{h}:00" for h in range(24)]
-                    hist_ax.plot(hours, doc["hourly_counts"], marker='o', color='orange')
-                    hist_ax.set_title(f"Hourly Maximum Occupancy on {selected_date}")
-                    hist_ax.set_xlabel("Hour of Day")
-                    hist_ax.set_ylabel("Maximum People Count")
-                    plt.xticks(rotation=45)
-                    st.pyplot(hist_fig)
-                    plt.close(hist_fig)
-                    
-                    hist_fig, hist_ax = plt.subplots(figsize=(10, 4))
-                    minutes = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 15)]
-                    hist_ax.plot(range(1440), doc["minute_counts"], linewidth=1, color='orange')
-                    hist_ax.set_title(f"Minute-by-Minute Presence on {selected_date}")
-                    hist_ax.set_xlabel("Time (24h)")
-                    hist_ax.set_ylabel("People Count")
-                    hist_ax.set_xticks(range(0, 1440, 15*4))
-                    hist_ax.set_xticklabels(minutes[::4], rotation=45)
-                    st.pyplot(hist_fig)
-                    plt.close(hist_fig)
+                if selected_date in data:
+                    st.write(f"### Data for {selected_date}")
+                    for camera_name in data[selected_date]:
+                        st.write(f"#### {camera_name}")
+                        col1, col2 = st.columns(2)
+                        
+                        # Minute-by-minute presence (circular clock)
+                        with col1:
+                            fig = plot_presence_clock(
+                                data[selected_date][camera_name]['presence'],
+                                camera_name, selected_date
+                            )
+                            st.pyplot(fig)
+                            plt.close(fig)
+                        
+                        # Hourly maximum occupancy
+                        with col2:
+                            fig = plot_hourly_occupancy(
+                                data[selected_date][camera_name]['hourly_max_counts'],
+                                camera_name, selected_date
+                            )
+                            st.pyplot(fig)
+                            plt.close(fig)
+                else:
+                    st.error(f"No data found for {selected_date}.")
             else:
-                st.info("No historical occupancy data available")
+                st.warning("No historical occupancy data available. Attempting to insert default data...")
+                insert_default_data()
+                data = load_occupancy_data()
+                date_options = sorted(list(data.keys()))
+                if date_options:
+                    st.experimental_rerun()
+                else:
+                    st.error("Failed to load or insert historical data. Please check MongoDB connection and logs.")
+                    st.write("**Troubleshooting Steps**:")
+                    st.write("1. Verify MongoDB connection in occupancy_dashboard.py.")
+                    st.write("2. Check logs for insertion errors.")
+                    st.write("3. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
         except Exception as e:
             st.error(f"Failed to load historical data: {e}")
+            st.write("**Troubleshooting Steps**:")
+            st.write("1. Ensure occupancy_dashboard.py is correctly implemented.")
+            st.write("2. Verify MongoDB connection and collection status.")
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
@@ -424,7 +440,7 @@ elif page == "Occupancy Dashboard":
         st.subheader("🎬 Occupancy Detection Controls")
         col1, col2 = st.columns(2)
         with col1:
-            from occupancy_detection import occ_model
+            from occupancy_dashboard import occ_model
             if st.button("👥 Start Occupancy Tracking", 
                         disabled=st.session_state.occ_detection_active or not st.session_state.occ_selected_cameras or occ_model is None,
                         help="Start monitoring selected cameras for people counting",
@@ -445,18 +461,15 @@ elif page == "Occupancy Dashboard":
             video_placeholder = st.empty()
         
         stats_placeholder = st.empty()
-        hourly_chart_placeholder = st.empty()
-        minute_chart_placeholder = st.empty()
         
         if st.session_state.occ_detection_active:
-            from occupancy_detection import occ_model
+            from occupancy_dashboard import occ_model, occupancy_detection_loop
             if occ_model is None:
                 st.error("Occupancy detection model not available")
             else:
                 try:
                     asyncio.run(occupancy_detection_loop(
-                        video_placeholder, stats_placeholder,
-                        hourly_chart_placeholder, minute_chart_placeholder
+                        video_placeholder, stats_placeholder
                     ))
                 except Exception as e:
                     st.error(f"Occupancy detection failed: {e}")
