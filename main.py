@@ -7,6 +7,7 @@ import asyncio
 import requests 
 import time, json, os
 import logging 
+import numpy as np
 import threading
 from matplotlib import pyplot as plt
 from pymongo import MongoClient
