@@ -1,3 +1,4 @@
+
 # import streamlit as st
 # import cv2
 # from ultralytics import YOLO
@@ -72,10 +73,10 @@
 #     # Create sample data
 #     hourly_counts = [0, 0, 0, 0, 2, 5, 8, 10, 12, 15, 10, 8, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0]
 #     minute_counts = [0] * 1440
-#     # Simulate some activity from 8:00 to 12:00
+#     # Simulate activity from 8:00 to 12:00
 #     for minute in range(480, 720):  # 8:00 to 12:00
 #         minute_counts[minute] = np.random.randint(0, 15)
-#     max_count = max(minute_counts)
+#     max_count = max(minute_counts) if minute_counts else 0
     
 #     default_doc = {
 #         "date": default_date,
@@ -129,13 +130,23 @@
 #         for doc in cursor:
 #             date = doc.get('date')
 #             cam = doc.get('camera_name')
+#             # Validate required fields
+#             if not all(key in doc for key in ['date', 'camera_name', 'max_count', 'hourly_counts', 'minute_counts']):
+#                 logger.warning(f"Skipping invalid document: missing required fields in {doc.get('document_id', 'unknown')}")
+#                 continue
+#             if not isinstance(doc['max_count'], (int, float)) or \
+#                not isinstance(doc['hourly_counts'], list) or len(doc['hourly_counts']) != 24 or \
+#                not isinstance(doc['minute_counts'], list) or len(doc['minute_counts']) != 1440:
+#                 logger.warning(f"Skipping invalid document: incorrect field types or lengths in {doc.get('document_id', 'unknown')}")
+#                 continue
+            
 #             if date and cam:
 #                 if date not in data:
 #                     data[date] = {}
 #                 data[date][cam] = {
-#                     'max_count': doc.get('max_count', 0),
-#                     'hourly_counts': doc.get('hourly_counts', [0] * 24),
-#                     'minute_counts': doc.get('minute_counts', [0] * 1440)
+#                     'max_count': doc['max_count'],
+#                     'hourly_counts': doc['hourly_counts'],
+#                     'minute_counts': doc['minute_counts']
 #                 }
 #         logger.info(f"Successfully loaded historical occupancy data for query: {query}")
 #         return data
@@ -470,6 +481,7 @@
 # if __name__ == "__main__":
 #     main()
 
+
 import streamlit as st
 import cv2
 from ultralytics import YOLO
@@ -524,6 +536,47 @@ occupancy_collection = init_mongo()
 if occupancy_collection is None:
     st.error("MongoDB connection failed. Cannot proceed with occupancy dashboard.")
     st.stop()
+
+# Function to clean up invalid documents
+def clean_invalid_documents():
+    """Detect and optionally delete invalid documents from the occupancy_data collection"""
+    if occupancy_collection is None:
+        logger.warning("No MongoDB collection available for cleaning documents")
+        return 0
+    
+    invalid_docs = []
+    try:
+        cursor = occupancy_collection.find()
+        for doc in cursor:
+            if not all(key in doc for key in ['date', 'camera_name', 'max_count', 'hourly_counts', 'minute_counts']):
+                invalid_docs.append({
+                    'document_id': doc.get('document_id', 'unknown'),
+                    'missing_fields': [key for key in ['date', 'camera_name', 'max_count', 'hourly_counts', 'minute_counts'] if key not in doc]
+                })
+            elif not isinstance(doc['max_count'], (int, float)) or \
+                 not isinstance(doc['hourly_counts'], list) or len(doc['hourly_counts']) != 24 or \
+                 not isinstance(doc['minute_counts'], list) or len(doc['minute_counts']) != 1440:
+                invalid_docs.append({
+                    'document_id': doc.get('document_id', 'unknown'),
+                    'error': "Incorrect field types or lengths"
+                })
+        
+        if invalid_docs:
+            st.warning(f"Found {len(invalid_docs)} invalid documents:")
+            for doc in invalid_docs:
+                st.write(f"- Document ID: {doc['document_id']}, Issue: {doc.get('missing_fields', doc.get('error'))}")
+            
+            if st.button("Delete Invalid Documents"):
+                for doc in invalid_docs:
+                    occupancy_collection.delete_one({"document_id": doc['document_id']})
+                logger.info(f"Deleted {len(invalid_docs)} invalid documents")
+                st.success(f"Deleted {len(invalid_docs)} invalid documents")
+                return len(invalid_docs)
+        return 0
+    except Exception as e:
+        logger.error(f"Failed to clean invalid documents: {str(e)}")
+        st.error(f"Failed to clean invalid documents: {str(e)}")
+        return 0
 
 # Function to insert default data for May 5, 2025, Cam Road
 def insert_default_data():
@@ -602,8 +655,9 @@ def load_occupancy_data(date=None, camera_name=None):
             date = doc.get('date')
             cam = doc.get('camera_name')
             # Validate required fields
-            if not all(key in doc for key in ['date', 'camera_name', 'max_count', 'hourly_counts', 'minute_counts']):
-                logger.warning(f"Skipping invalid document: missing required fields in {doc.get('document_id', 'unknown')}")
+            missing_fields = [key for key in ['date', 'camera_name', 'max_count', 'hourly_counts', 'minute_counts'] if key not in doc]
+            if missing_fields:
+                logger.warning(f"Skipping invalid document: missing fields {missing_fields} in {doc.get('document_id', 'unknown')}")
                 continue
             if not isinstance(doc['max_count'], (int, float)) or \
                not isinstance(doc['hourly_counts'], list) or len(doc['hourly_counts']) != 24 or \
@@ -934,6 +988,11 @@ def main():
     stats_placeholder = st.empty()
     hourly_chart_placeholder = st.empty()
     minute_chart_placeholder = st.empty()
+    
+    # Clean invalid documents interface
+    st.sidebar.header("Database Maintenance")
+    if st.sidebar.button("Check for Invalid Documents"):
+        clean_invalid_documents()
     
     # Display historical data interface
     display_historical_data()
