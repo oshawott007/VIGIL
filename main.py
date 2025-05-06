@@ -5,7 +5,7 @@ import streamlit as st
 from datetime import datetime
 import asyncio
 import requests 
-import time
+import time, json, os
 import logging 
 import threading
 from matplotlib import pyplot as plt
@@ -335,114 +335,153 @@ elif page == "Fire Detection":
 elif page == "Occupancy Dashboard":
     st.header("👥 Occupancy Dashboard")
     
-    # Initialize detection state from MongoDB
+    # Initialize detection state (no MongoDB, use session state only)
     def get_occupancy_detection_state():
-        if client is None:
-            return False
-        doc = occupancy_settings_collection.find_one({"type": "detection_state"})
-        return doc.get("active", False) if doc else False
+        return st.session_state.get('occ_detection_active', False)
     
     def set_occupancy_detection_state(active):
-        if client is None:
-            return
-        occupancy_settings_collection.update_one(
-            {"type": "detection_state"},
-            {"$set": {"active": active}},
-            upsert=True
-        )
+        st.session_state.occ_detection_active = active
     
-    # Function to clear invalid documents
-    def clear_invalid_documents():
-        from occupancy_detection import occupancy_collection
-        if occupancy_collection is None:
-            st.error("No MongoDB collection available")
-            logger.error("No MongoDB collection available for clearing invalid documents")
-            return False
+    # JSON file path
+    JSON_FILE = "occupancy_data.json"
+    
+    # Function to load data from JSON
+    def load_occupancy_data(date=None):
         try:
-            result = occupancy_collection.delete_many({
-                "$or": [
-                    {"camera_name": {"$exists": False}},
-                    {"presence": {"$exists": False}},
-                    {"hourly_max_counts": {"$exists": False}},
-                    {"presence": {"$not": {"$size": 1440}}},
-                    {"hourly_max_counts": {"$not": {"$size": 24}}}
-                ]
-            })
-            st.success(f"Deleted {result.deleted_count} invalid documents")
-            logger.info(f"Deleted {result.deleted_count} invalid documents")
+            if not os.path.exists(JSON_FILE):
+                logger.info(f"No JSON file found at {JSON_FILE}. Creating empty file.")
+                with open(JSON_FILE, 'w') as f:
+                    json.dump({}, f)
+                return {}
+            
+            with open(JSON_FILE, 'r') as f:
+                data = json.load(f)
+            
+            # Validate data structure
+            validated_data = {}
+            for date_str, cameras in data.items():
+                if not isinstance(cameras, dict):
+                    logger.warning(f"Skipping invalid data for date {date_str}: not a dictionary")
+                    continue
+                validated_cameras = {}
+                for cam_name, cam_data in cameras.items():
+                    if not all(key in cam_data for key in ['presence', 'hourly_max_counts']):
+                        logger.warning(f"Skipping invalid data for {date_str}, {cam_name}: missing fields")
+                        continue
+                    if not (isinstance(cam_data['presence'], list) and len(cam_data['presence']) == 1440 and
+                            isinstance(cam_data['hourly_max_counts'], list) and len(cam_data['hourly_max_counts']) == 24):
+                        logger.warning(f"Skipping invalid data for {date_str}, {cam_name}: incorrect field lengths")
+                        continue
+                    validated_cameras[cam_name] = cam_data
+                if validated_cameras:
+                    validated_data[date_str] = validated_cameras
+            
+            if date:
+                date_str = str(date)
+                return {date_str: validated_data.get(date_str, {})} if date_str in validated_data else {}
+            return validated_data
+        except Exception as e:
+            st.error(f"Failed to load JSON data: {e}")
+            logger.error(f"Failed to load JSON data: {e}")
+            return {}
+    
+    # Function to insert default data into JSON
+    def insert_default_data():
+        try:
+            data = load_occupancy_data()
+            default_dates = ["2025-05-04", "2025-05-05"]
+            cameras = ["Cam Road", "Cam Hall"]
+            
+            for default_date in default_dates:
+                if default_date not in data:
+                    data[default_date] = {}
+                for camera_name in cameras:
+                    # Skip if valid data already exists
+                    if (default_date in data and camera_name in data[default_date] and
+                        isinstance(data[default_date][camera_name].get('presence'), list) and
+                        len(data[default_date][camera_name]['presence']) == 1440 and
+                        isinstance(data[default_date][camera_name].get('hourly_max_counts'), list) and
+                        len(data[default_date][camera_name]['hourly_max_counts']) == 24):
+                        logger.info(f"Default data for {default_date}, {camera_name} already exists")
+                        continue
+                    
+                    # Create sample data
+                    presence = [0] * 1440
+                    hourly_max_counts = [0] * 24
+                    
+                    if default_date == "2025-05-04":
+                        for minute in range(420, 660):  # 7:00 to 11:00
+                            presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])
+                        for minute in range(900, 1080):  # 15:00 to 18:00
+                            presence[minute] = np.random.choice([0, 1], p=[0.5, 0.5])
+                        for hour in range(24):
+                            max_count = max(np.random.randint(0, 8, size=10)) if hour in range(7, 11) or hour in range(15, 18) else 0
+                            hourly_max_counts[hour] = max_count
+                    else:  # 2025-05-05
+                        for minute in range(480, 720):  # 8:00 to 12:00
+                            presence[minute] = np.random.choice([0, 1], p=[0.3, 0.7])
+                        for minute in range(840, 1020):  # 14:00 to 17:00
+                            presence[minute] = np.random.choice([0, 1], p=[0.4, 0.6])
+                        for hour in range(24):
+                            max_count = max(np.random.randint(0, 10, size=10)) if hour in range(8, 12) or hour in range(14, 17) else 0
+                            hourly_max_counts[hour] = max_count
+                    
+                    data[default_date][camera_name] = {
+                        "presence": presence,
+                        "hourly_max_counts": hourly_max_counts
+                    }
+            
+            with open(JSON_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.info("Default data inserted into JSON file")
             return True
         except Exception as e:
-            st.error(f"Failed to clear invalid documents: {e}")
-            logger.error(f"Failed to clear invalid documents: {e}")
+            st.error(f"Failed to insert default data: {e}")
+            logger.error(f"Failed to insert default data: {e}")
             return False
     
-    # Function to check MongoDB collection status
-    def check_collection_status():
-        from occupancy_detection import occupancy_collection
-        if occupancy_collection is None:
-            st.error("No MongoDB collection available")
-            logger.error("No MongoDB collection available for checking status")
-            return
+    # Function to clear invalid data from JSON
+    def clear_invalid_data():
         try:
-            count = occupancy_collection.count_documents({})
-            st.write(f"Total documents in collection: {count}")
-            if count == 0:
-                st.warning("No documents found. Inserting default data...")
-                from occupancy_detection import insert_default_data
-                insert_default_data()
-                count = occupancy_collection.count_documents({})
-                st.write(f"After inserting default data, total documents: {count}")
-            
-            st.write("### Documents in Collection")
-            cursor = occupancy_collection.find()
-            for doc in cursor:
-                st.write(f"- Date: {doc.get('date', 'N/A')}, Camera: {doc.get('camera_name', 'N/A')}, "
-                         f"Document ID: {doc.get('document_id', 'N/A')}, "
-                         f"Presence Length: {len(doc.get('presence', []))}, "
-                         f"Hourly Max Counts Length: {len(doc.get('hourly_max_counts', []))}")
+            if os.path.exists(JSON_FILE):
+                os.remove(JSON_FILE)
+                logger.info(f"Deleted {JSON_FILE}")
+            with open(JSON_FILE, 'w') as f:
+                json.dump({}, f)
+            st.success("Cleared invalid data and reset JSON file")
+            logger.info("Cleared invalid data and reset JSON file")
+            return True
         except Exception as e:
-            st.error(f"Failed to check collection status: {e}")
-            logger.error(f"Failed to check collection status: {e}")
+            st.error(f"Failed to clear invalid data: {e}")
+            logger.error(f"Failed to clear invalid data: {e}")
+            return False
     
-    # Initialize session state from DB
+    # Initialize session state
     if 'occ_detection_active' not in st.session_state:
         st.session_state.occ_detection_active = get_occupancy_detection_state()
     
-    # Force sync between session state and DB
-    current_db_state = get_occupancy_detection_state()
-    if st.session_state.occ_detection_active != current_db_state:
-        st.session_state.occ_detection_active = current_db_state
+    # Force sync (no DB, just session state)
+    current_state = get_occupancy_detection_state()
+    if st.session_state.occ_detection_active != current_state:
+        st.session_state.occ_detection_active = current_state
         st.experimental_rerun()
 
     st.write("Track and display occupancy counts in monitored areas.")
     
-    # MongoDB status and cleanup interface
-    st.sidebar.header("MongoDB Status")
-    if st.sidebar.button("Check MongoDB Status"):
-        check_collection_status()
-    if st.sidebar.button("Clear Invalid Documents and Insert Default Data"):
-        if clear_invalid_documents():
-            from occupancy_detection import insert_default_data
-            for _ in range(3):  # Retry up to 3 times
-                try:
-                    insert_default_data()
-                    st.success("Default data inserted for 2025-05-04 and 2025-05-05")
-                    logger.info("Default data inserted successfully")
-                    st.experimental_rerun()
-                    break
-                except Exception as e:
-                    st.warning(f"Retry failed: {e}")
-                    logger.error(f"Retry failed for insert_default_data: {e}")
-            else:
-                st.error("Failed to insert default data after retries")
-                logger.error("Failed to insert default data after retries")
+    # JSON data management interface
+    st.sidebar.header("Data Management")
+    if st.sidebar.button("Reset Data and Insert Defaults"):
+        if clear_invalid_data():
+            if insert_default_data():
+                st.success("Default data inserted for 2025-05-04 and 2025-05-05")
+                st.experimental_rerun()
     
     view_history = st.checkbox("View Historical Data", key="view_occupancy_history")
     
     if view_history:
         st.subheader("Historical Data")
         try:
-            from occupancy_detection import load_occupancy_data, plot_presence_clock, plot_hourly_occupancy, insert_default_data
+            from occupancy_detection import plot_presence_clock, plot_hourly_occupancy
             data = load_occupancy_data()
             date_options = sorted(list(data.keys()))
             if date_options:
@@ -474,34 +513,28 @@ elif page == "Occupancy Dashboard":
                     st.error(f"No data found for {selected_date}.")
             else:
                 st.warning("No historical occupancy data available. Attempting to insert default data...")
-                if clear_invalid_documents():
-                    for _ in range(3):  # Retry up to 3 times
-                        try:
-                            insert_default_data()
-                            data = load_occupancy_data()
-                            date_options = sorted(list(data.keys()))
-                            if date_options:
-                                st.success("Default data inserted successfully")
-                                logger.info("Default data inserted successfully")
-                                st.experimental_rerun()
-                            break
-                        except Exception as e:
-                            st.warning(f"Retry failed: {e}")
-                            logger.error(f"Retry failed for insert_default_data: {e}")
+                if clear_invalid_data():
+                    if insert_default_data():
+                        st.success("Default data inserted successfully")
+                        data = load_occupancy_data()
+                        date_options = sorted(list(data.keys()))
+                        if date_options:
+                            st.experimental_rerun()
+                        else:
+                            st.error("Failed to insert default data.")
                     else:
-                        st.error("Failed to insert default data after retries")
-                        logger.error("Failed to insert default data after retries")
-                        st.write("**Troubleshooting Steps**:")
-                        st.write("1. Verify MongoDB connection in occupancy_detection.py.")
-                        st.write("2. Check logs for insertion errors.")
-                        st.write("3. Use 'Clear Invalid Documents and Insert Default Data' button.")
-                        st.write("4. Ensure default data for 2025-05-04 and 2025-05-05 is inserted.")
+                        st.error("Failed to insert default data.")
+                    st.write("**Troubleshooting Steps**:")
+                    st.write("1. Ensure write permissions for the app directory.")
+                    st.write("2. Check logs for file access errors.")
+                    st.write("3. Use 'Reset Data and Insert Defaults' button.")
+                    st.write("4. Verify occupancy_data.json exists in the repository.")
         except Exception as e:
             st.error(f"Failed to load historical data: {e}")
             st.write("**Troubleshooting Steps**:")
             st.write("1. Ensure occupancy_detection.py is correctly implemented.")
-            st.write("2. Verify MongoDB connection and collection status.")
-            st.write("3. Check for invalid documents using 'Check MongoDB Status'.")
+            st.write("2. Verify occupancy_data.json is accessible.")
+            st.write("3. Check for file corruption or permission issues.")
     
     if not st.session_state.cameras:
         st.warning("Please add cameras first in the Camera Management tab")
