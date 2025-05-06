@@ -1,3 +1,4 @@
+
 # import streamlit as st
 # import cv2
 # from ultralytics import YOLO
@@ -38,79 +39,54 @@
 #         return None
 
 # no_access_model = load_model()
-# if no_access_model is None:
-#     st.stop()
 
-# def save_no_access_event(timestamp: datetime, num_people: int, camera_name: str, snapshot: np.ndarray = None):
-#     """Save no-access event to MongoDB with optional image snapshot."""
+# def save_no_access_event(camera_name: str):
+#     """Save human detection event to MongoDB."""
 #     try:
+#         timestamp = datetime.now()
 #         event = {
-#             'timestamp': timestamp,
-#             'date': timestamp.strftime("%Y-%m-%d"),
-#             'month': timestamp.strftime("%Y-%m"),
-#             'num_people': num_people,
 #             'camera_name': camera_name,
-#             'processed': False
+#             'date': timestamp.strftime("%Y-%m-%d"),
+#             'time': timestamp.strftime("%H:%M:%S"),
+#             'timestamp': timestamp
 #         }
         
-#         if snapshot is not None:
-#             _, buffer = cv2.imencode('.jpg', snapshot)
-#             event['snapshot'] = buffer.tobytes()
-        
 #         result = no_access_collection.insert_one(event)
-#         logger.info(f"Saved no-access event with ID: {result.inserted_id}")
+#         logger.info(f"Saved detection event with ID: {result.inserted_id}")
 #         return result.inserted_id
 #     except Exception as e:
-#         logger.error(f"Failed to save no-access event: {e}")
+#         logger.error(f"Failed to save detection event: {e}")
 #         return None
 
-# def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
-#     """Load historical no-access data with optional date or month filtering."""
+# def get_historical_data(date_filter: str = None) -> pd.DataFrame:
+#     """Load historical detection data with optional date filtering."""
 #     try:
 #         query = {}
 #         if date_filter:
 #             query['date'] = date_filter
-#         elif month_filter:
-#             query['month'] = month_filter
         
 #         cursor = no_access_collection.find(query).sort('timestamp', -1)
         
-#         data = {}
+#         data = []
 #         for doc in cursor:
-#             date = doc['date']
-#             if date not in data:
-#                 data[date] = []
-#             entry = {
-#                 'timestamp': doc['timestamp'],
-#                 'num_people': doc['num_people'],
-#                 'camera_name': doc['camera_name']
-#             }
-#             if 'snapshot' in doc:
-#                 entry['has_snapshot'] = True
-#             data[date].append(entry)
+#             data.append({
+#                 'Camera': doc['camera_name'],
+#                 'Date': doc['date'],
+#                 'Time': doc['time']
+#             })
         
-#         logger.info(f"Loaded {len(data)} days of no-access data")
-#         return data
+#         return pd.DataFrame(data)
 #     except Exception as e:
-#         logger.error(f"Failed to load no-access data: {e}")
-#         return {}
+#         logger.error(f"Failed to load historical data: {e}")
+#         return pd.DataFrame(columns=["Camera", "Date", "Time"])
 
 # def get_available_dates() -> List[str]:
-#     """Get list of available dates with no-access events."""
+#     """Get list of available dates with detection events."""
 #     try:
 #         dates = no_access_collection.distinct('date')
 #         return sorted(dates, reverse=True)
 #     except Exception as e:
 #         logger.error(f"Failed to get available dates: {e}")
-#         return []
-
-# def get_available_months() -> List[str]:
-#     """Get list of available months with no-access events."""
-#     try:
-#         months = no_access_collection.distinct('month')
-#         return sorted(months, reverse=True)
-#     except Exception as e:
-#         logger.error(f"Failed to get available months: {e}")
 #         return []
 
 # async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
@@ -119,8 +95,7 @@
 #     human_class_id = 0  # COCO class ID for person
 #     cooldown_duration = 300  # 5 minutes (300 seconds) cooldown after detection
 #     last_detection_time = 0
-#     people_table = pd.DataFrame(columns=["Timestamp", "Number of People", "Camera"])
-#     last_timestamp = None
+#     detections_table = pd.DataFrame(columns=["Camera", "Date", "Time"])
 
 #     # Initialize video captures
 #     caps = {}
@@ -136,7 +111,7 @@
 #             continue
 
 #     if not caps:
-#         video_placeholder.error("No cameras available for no-access room detection")
+#         video_placeholder.error("No cameras available for detection")
 #         return
 
 #     try:
@@ -204,21 +179,14 @@
 
 #                 # Process detections
 #                 if human_detections:
+#                     # Save detection event
+#                     save_no_access_event(cam_name)
+                    
+#                     # Update table with new detection
 #                     timestamp = datetime.now()
-#                     timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-                    
-#                     # Save event to database with snapshot
-#                     save_no_access_event(
-#                         timestamp=timestamp,
-#                         num_people=len(human_detections),
-#                         camera_name=cam_name,
-#                         snapshot=frame
-#                     )
-                    
-#                     # Update table
-#                     new_entry = pd.DataFrame([[timestamp_str, len(human_detections), cam_name]],
-#                                           columns=["Timestamp", "Number of People", "Camera"])
-#                     people_table = pd.concat([people_table, new_entry], ignore_index=True)
+#                     new_entry = pd.DataFrame([[cam_name, timestamp.strftime("%Y-%m-%d"), timestamp.strftime("%H:%M:%S")]],
+#                                           columns=["Camera", "Date", "Time"])
+#                     detections_table = pd.concat([detections_table, new_entry], ignore_index=True)
                     
 #                     # Start cooldown period
 #                     last_detection_time = current_time
@@ -229,8 +197,8 @@
 
 #                 # Update detection table
 #                 try:
-#                     if not people_table.empty:
-#                         table_placeholder.dataframe(people_table)
+#                     if not detections_table.empty:
+#                         table_placeholder.dataframe(detections_table)
 #                     else:
 #                         table_placeholder.info("No human detections yet")
 #                 except Exception as e:
@@ -247,7 +215,6 @@
 #                 logger.error(f"Failed to release camera: {e}")
 #         cv2.destroyAllWindows()
 #         logger.info("Camera resources released")
-
 
 
 import streamlit as st
@@ -309,35 +276,51 @@ def save_no_access_event(camera_name: str):
         logger.error(f"Failed to save detection event: {e}")
         return None
 
-def get_historical_data(date_filter: str = None) -> pd.DataFrame:
-    """Load historical detection data with optional date filtering."""
+def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
+    """Load historical no-access data with optional date or month filtering."""
     try:
         query = {}
         if date_filter:
             query['date'] = date_filter
+        elif month_filter:
+            query['month'] = month_filter
         
         cursor = no_access_collection.find(query).sort('timestamp', -1)
         
-        data = []
+        data = {}
         for doc in cursor:
-            data.append({
-                'Camera': doc['camera_name'],
-                'Date': doc['date'],
-                'Time': doc['time']
-            })
+            date = doc['date']
+            if date not in data:
+                data[date] = []
+            entry = {
+                'timestamp': doc['timestamp'],
+                'camera_name': doc['camera_name'],
+                'time': doc['time']
+            }
+            data[date].append(entry)
         
-        return pd.DataFrame(data)
+        logger.info(f"Loaded {len(data)} days of no-access data")
+        return data
     except Exception as e:
-        logger.error(f"Failed to load historical data: {e}")
-        return pd.DataFrame(columns=["Camera", "Date", "Time"])
+        logger.error(f"Failed to load no-access data: {e}")
+        return {}
 
 def get_available_dates() -> List[str]:
-    """Get list of available dates with detection events."""
+    """Get list of available dates with no-access events."""
     try:
         dates = no_access_collection.distinct('date')
         return sorted(dates, reverse=True)
     except Exception as e:
         logger.error(f"Failed to get available dates: {e}")
+        return []
+
+def get_available_months() -> List[str]:
+    """Get list of available months with no-access events."""
+    try:
+        months = no_access_collection.distinct('month')
+        return sorted(months, reverse=True)
+    except Exception as e:
+        logger.error(f"Failed to get available months: {e}")
         return []
 
 async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
@@ -466,5 +449,4 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                 logger.error(f"Failed to release camera: {e}")
         cv2.destroyAllWindows()
         logger.info("Camera resources released")
-
 
