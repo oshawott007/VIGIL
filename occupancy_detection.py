@@ -294,8 +294,9 @@ import numpy as np
 import asyncio
 import logging
 from pymongo import MongoClient
-from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure
+from pymongo.errors import ServerSelectionTimeoutError, ConnectionFailure, OperationFailure
 from matplotlib import pyplot as plt
+import uuid
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -316,6 +317,8 @@ def init_mongo():
         client.admin.command('ping')
         db = client['vigil']
         occupancy_collection = db['occupancy_data']
+        # Verify collection accessibility
+        occupancy_collection.find_one()
         logger.info("Connected to MongoDB Atlas successfully!")
         st.success("Connected to MongoDB Atlas successfully!")
         return occupancy_collection
@@ -335,6 +338,7 @@ def init_mongo():
 
 occupancy_collection = init_mongo()
 if occupancy_collection is None:
+    st.error("MongoDB connection failed. Cannot proceed with occupancy dashboard.")
     st.stop()
 
 # Load occupancy detection model
@@ -357,50 +361,67 @@ if occ_model is None:
 def load_occupancy_data():
     """Load historical occupancy data from MongoDB Atlas"""
     if occupancy_collection is None:
+        logger.warning("No MongoDB collection available for loading occupancy data")
         return {}
     
     try:
         data = {}
         cursor = occupancy_collection.find()
         for doc in cursor:
-            date = doc['date']
-            data[date] = {
-                'max_count': doc['max_count'],
-                'hourly_counts': doc['hourly_counts'],
-                'minute_counts': doc['minute_counts']
-            }
+            date = doc.get('date')
+            if date:
+                data[date] = {
+                    'max_count': doc.get('max_count', 0),
+                    'hourly_counts': doc.get('hourly_counts', [0] * 24),
+                    'minute_counts': doc.get('minute_counts', [0] * 1440)
+                }
+        logger.info("Successfully loaded historical occupancy data")
         return data
     except Exception as e:
-        logger.error(f"Failed to load occupancy data: {e}")
+        logger.error(f"Failed to load occupancy data: {str(e)}")
+        st.warning(f"Failed to load historical occupancy data: {str(e)}")
         return {}
 
 # Function to get or create today's document
 def get_today_document():
     """Get or create today's occupancy document in MongoDB Atlas"""
     if occupancy_collection is None:
+        logger.error("No MongoDB collection available for today's document")
         return None
     
     today = datetime.now().date()
     try:
+        # Attempt to find today's document
         document = occupancy_collection.find_one({"date": str(today)})
         if not document:
+            # Create new document with default values
             document = {
                 "date": str(today),
                 "max_count": 0,
                 "hourly_counts": [0] * 24,
                 "minute_counts": [0] * 1440,
-                "last_updated": datetime.now()
+                "last_updated": datetime.now(),
+                "document_id": str(uuid.uuid4())  # Unique identifier for traceability
             }
             occupancy_collection.insert_one(document)
+            logger.info(f"Created new occupancy document for {today}")
+        else:
+            logger.info(f"Retrieved existing occupancy document for {today}")
         return document
+    except OperationFailure as e:
+        logger.error(f"Database operation failed for today's document: {str(e)}")
+        st.error(f"Database operation failed: {str(e)}")
+        return None
     except Exception as e:
-        logger.error(f"Failed to get or create today's document: {e}")
+        logger.error(f"Failed to get or create today's document: {str(e)}")
+        st.error(f"Failed to initialize occupancy data: {str(e)}")
         return None
 
 # Function to update the database
 def update_database(current_count, hourly_counts, minute_counts, max_count):
     """Update the occupancy database with current count"""
     if occupancy_collection is None:
+        logger.warning("No MongoDB collection available for database update")
         return max_count, hourly_counts, minute_counts
     
     today = datetime.now().date()
@@ -422,15 +443,18 @@ def update_database(current_count, hourly_counts, minute_counts, max_count):
             }},
             upsert=True
         )
+        logger.info(f"Updated occupancy data for {today}")
         return new_max, hourly_counts, minute_counts
     except Exception as e:
-        logger.error(f"Failed to update database: {e}")
+        logger.error(f"Failed to update database: {str(e)}")
+        st.warning(f"Failed to update database: {str(e)}")
         return max_count, hourly_counts, minute_counts
 
 # Function to detect people in a frame
 def detect_people(frame):
     """Detect people in a frame using YOLO"""
     if occ_model is None:
+        logger.error("No model available for person detection")
         return frame, 0
     
     try:
@@ -447,7 +471,7 @@ def detect_people(frame):
                                0.5, (0, 255, 0), 2)
         return frame, people_count
     except Exception as e:
-        logger.error(f"Failed to detect people: {e}")
+        logger.error(f"Failed to detect people: {str(e)}")
         return frame, 0
 
 # Async function for occupancy detection loop
@@ -477,12 +501,14 @@ async def occupancy_detection_loop(video_placeholder, stats_placeholder,
     
     if not caps:
         video_placeholder.error("No valid cameras available")
+        st.stop()
         return
     
     # Initialize today's data
     today_doc = get_today_document()
     if today_doc is None:
-        video_placeholder.error("Failed to initialize occupancy data")
+        video_placeholder.error("Failed to initialize occupancy data. Check MongoDB connection and permissions.")
+        st.stop()
         return
     
     max_count = today_doc["max_count"]
