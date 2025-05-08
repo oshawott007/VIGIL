@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 import cv2
 from ultralytics import YOLO
@@ -9,25 +7,98 @@ import numpy as np
 import time
 import logging
 import asyncio
-from pymongo import MongoClient
+import json
+import os
 from typing import Dict, List
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# MongoDB connection setup
-@st.cache_resource
-def init_mongo_connection():
+# JSON file for data storage
+DATA_FILE = "no_access_events.json"
+
+def init_json_storage():
     try:
-        client = MongoClient("mongodb+srv://infernapeamber:g9kASflhhSQ26GMF@cluster0.mjoloub.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
-        db = client["vigil"]
-        return db.no_access_events
+        if not os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'w') as f:
+                json.dump([], f)
     except Exception as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
+        logger.error(f"Failed to initialize JSON storage: {e}")
+
+def save_no_access_event(camera_name: str):
+    try:
+        timestamp = datetime.now()
+        event = {
+            'camera_name': camera_name,
+            'date': timestamp.strftime("%Y-%m-%d"),
+            'time': timestamp.strftime("%H:%M:%S"),
+            'timestamp': timestamp.isoformat(),
+            'month': timestamp.strftime("%Y-%m")
+        }
+        
+        # Read existing data
+        with open(DATA_FILE, 'r') as f:
+            data = json.load(f)
+        
+        # Append new event
+        data.append(event)
+        
+        # Write back to file
+        with open(DATA_FILE, 'w') as f:
+            json.dump(data, f)
+            
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save event: {e}")
         return None
 
-no_access_collection = init_mongo_connection()
+def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
+    try:
+        with open(DATA_FILE, 'r') as f:
+            data = json.load(f)
+        
+        filtered_data = []
+        for event in data:
+            if date_filter and event['date'] == date_filter:
+                filtered_data.append(event)
+            elif month_filter and event['month'] == month_filter:
+                filtered_data.append(event)
+            elif not date_filter and not month_filter:
+                filtered_data.append(event)
+        
+        # Organize by date
+        organized_data = {}
+        for event in filtered_data:
+            date = event['date']
+            if date not in organized_data:
+                organized_data[date] = []
+            entry = {
+                'timestamp': datetime.fromisoformat(event['timestamp']),
+                'camera_name': event['camera_name'],
+                'time': event['time']
+            }
+            organized_data[date].append(entry)
+        
+        # Sort each date's events by timestamp
+        for date in organized_data:
+            organized_data[date].sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return organized_data
+    except Exception as e:
+        logger.error(f"Failed to load data: {e}")
+        return {}
+
+def get_available_dates() -> List[str]:
+    try:
+        with open(DATA_FILE, 'r') as f:
+            data = json.load(f)
+        
+        dates = list(set(event['date'] for event in data))
+        return sorted(dates, reverse=True)
+    except Exception as e:
+        logger.error(f"Failed to get dates: {e}")
+        return []
 
 @st.cache_resource
 def load_model():
@@ -40,57 +111,7 @@ def load_model():
         return None
 
 no_access_model = load_model()
-
-def save_no_access_event(camera_name: str):
-    try:
-        timestamp = datetime.now()
-        event = {
-            'camera_name': camera_name,
-            'date': timestamp.strftime("%Y-%m-%d"),
-            'time': timestamp.strftime("%H:%M:%S"),
-            'timestamp': timestamp,
-            'month': timestamp.strftime("%Y-%m")
-        }
-        result = no_access_collection.insert_one(event)
-        return result.inserted_id
-    except Exception as e:
-        logger.error(f"Failed to save event: {e}")
-        return None
-
-def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
-    try:
-        query = {}
-        if date_filter:
-            query['date'] = date_filter
-        elif month_filter:
-            query['month'] = month_filter
-        
-        cursor = no_access_collection.find(query).sort('timestamp', -1)
-        
-        data = {}
-        for doc in cursor:
-            date = doc['date']
-            if date not in data:
-                data[date] = []
-            entry = {
-                'timestamp': doc['timestamp'],
-                'camera_name': doc['camera_name'],
-                'time': doc['time']
-            }
-            data[date].append(entry)
-        
-        return data
-    except Exception as e:
-        logger.error(f"Failed to load data: {e}")
-        return {}
-
-def get_available_dates() -> List[str]:
-    try:
-        dates = no_access_collection.distinct('date')
-        return sorted(dates, reverse=True)
-    except Exception as e:
-        logger.error(f"Failed to get dates: {e}")
-        return []
+init_json_storage()
 
 async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
     confidence_threshold = 0.5
@@ -173,7 +194,3 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
         for cap in caps.values():
             cap.release()
         cv2.destroyAllWindows()
-
-
-
-
