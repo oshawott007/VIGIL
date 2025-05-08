@@ -173,3 +173,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
         for cap in caps.values():
             cap.release()
         cv2.destroyAllWindows()
+
+
+
+
