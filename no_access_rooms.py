@@ -308,7 +308,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # JSON file for data storage
-DATA_FILE = "no_access_events.json"
+DATA_FILE = "no_access.json"
 
 def init_json_storage():
     """Initialize JSON storage with sample data"""
