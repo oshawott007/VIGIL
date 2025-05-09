@@ -1,7 +1,7 @@
 # import streamlit as st
 # import cv2
 # from ultralytics import YOLO
-# from datetime import datetime
+# from datetime import datetime, timedelta
 # import pandas as pd
 # import numpy as np
 # import time
@@ -20,9 +20,48 @@
 
 # def init_json_storage():
 #     try:
+#         # Sample data for testing historical view
+#         sample_data = [
+#             {
+#                 'camera_name': "Entrance Camera",
+#                 'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+#                 'time': "10:15:32",
+#                 'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
+#                 'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m")
+#             },
+#             {
+#                 'camera_name': "Backdoor Camera",
+#                 'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+#                 'time': "14:22:45",
+#                 'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
+#                 'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m")
+#             },
+#             {
+#                 'camera_name': "Warehouse Camera",
+#                 'date': datetime.now().strftime("%Y-%m-%d"),
+#                 'time': "09:05:12",
+#                 'timestamp': datetime.now().isoformat(),
+#                 'month': datetime.now().strftime("%Y-%m")
+#             }
+#         ]
+
 #         if not os.path.exists(DATA_FILE):
 #             with open(DATA_FILE, 'w') as f:
-#                 json.dump([], f)
+#                 json.dump(sample_data, f)
+#             logger.info("Created new data file with sample records")
+#         else:
+#             # If file exists but is empty, add sample data
+#             with open(DATA_FILE, 'r') as f:
+#                 try:
+#                     existing_data = json.load(f)
+#                     if not existing_data:
+#                         with open(DATA_FILE, 'w') as f:
+#                             json.dump(sample_data, f)
+#                         logger.info("Added sample records to empty data file")
+#                 except json.JSONDecodeError:
+#                     with open(DATA_FILE, 'w') as f:
+#                         json.dump(sample_data, f)
+#                     logger.info("Created new data file (invalid JSON)")
 #     except Exception as e:
 #         logger.error(f"Failed to initialize JSON storage: {e}")
 
@@ -37,14 +76,11 @@
 #             'month': timestamp.strftime("%Y-%m")
 #         }
         
-#         # Read existing data
 #         with open(DATA_FILE, 'r') as f:
 #             data = json.load(f)
         
-#         # Append new event
 #         data.append(event)
         
-#         # Write back to file
 #         with open(DATA_FILE, 'w') as f:
 #             json.dump(data, f)
             
@@ -67,7 +103,6 @@
 #             elif not date_filter and not month_filter:
 #                 filtered_data.append(event)
         
-#         # Organize by date
 #         organized_data = {}
 #         for event in filtered_data:
 #             date = event['date']
@@ -80,7 +115,6 @@
 #             }
 #             organized_data[date].append(entry)
         
-#         # Sort each date's events by timestamp
 #         for date in organized_data:
 #             organized_data[date].sort(key=lambda x: x['timestamp'], reverse=True)
         
@@ -195,6 +229,63 @@
 #             cap.release()
 #         cv2.destroyAllWindows()
 
+# def main():
+#     st.title("Restricted Area Monitoring System")
+    
+#     # Historical Data View Section
+#     st.sidebar.header("Historical Data")
+#     view_option = st.sidebar.radio("View by", ["All Data", "Date", "Month"])
+    
+#     if view_option == "Date":
+#         available_dates = get_available_dates()
+#         selected_date = st.sidebar.selectbox("Select Date", available_dates)
+#         historical_data = load_no_access_data(date_filter=selected_date)
+#     elif view_option == "Month":
+#         available_months = sorted(list(set(d[:7] for d in get_available_dates())), reverse=True)
+#         selected_month = st.sidebar.selectbox("Select Month", available_months)
+#         historical_data = load_no_access_data(month_filter=selected_month)
+#     else:
+#         historical_data = load_no_access_data()
+    
+#     if historical_data:
+#         st.subheader("Detection History")
+#         for date, events in historical_data.items():
+#             st.markdown(f"**{date}**")
+#             df = pd.DataFrame(events)
+#             df = df[['time', 'camera_name']]  # Don't show timestamp column
+#             st.table(df)
+#     else:
+#         st.info("No historical data available")
+
+#     # Live Monitoring Section
+#     st.sidebar.header("Live Monitoring")
+#     cameras = [
+#         {"name": "Camera 1", "address": 0},
+#         {"name": "Camera 2", "address": "http://example.com/stream"}
+#     ]
+    
+#     selected_camera_names = st.sidebar.multiselect(
+#         "Select Cameras",
+#         [cam["name"] for cam in cameras],
+#         default=[cameras[0]["name"]]
+#     )
+    
+#     selected_cameras = [cam for cam in cameras if cam["name"] in selected_camera_names]
+    
+#     if st.sidebar.button("Start Monitoring"):
+#         st.session_state.no_access_detection_active = True
+#         video_placeholder = st.empty()
+#         table_placeholder = st.empty()
+#         asyncio.run(no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras))
+    
+#     if st.sidebar.button("Stop Monitoring"):
+#         if 'no_access_detection_active' in st.session_state:
+#             st.session_state.no_access_detection_active = False
+#         st.experimental_rerun()
+
+# if __name__ == "__main__":
+#     main()
+
 
 
 
@@ -232,23 +323,26 @@ def init_json_storage():
             {
                 'camera_name': "Entrance Camera",
                 'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
-                'time': "10:15:32",
+                'time': (datetime.now() - timedelta(days=1)).strftime("%H:%M:%S.%f")[:-3],
                 'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
-                'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m")
+                'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m"),
+                'people_count': 2
             },
             {
                 'camera_name': "Backdoor Camera",
                 'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
-                'time': "14:22:45",
+                'time': (datetime.now() - timedelta(days=1)).strftime("%H:%M:%S.%f")[:-3],
                 'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
-                'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m")
+                'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m"),
+                'people_count': 1
             },
             {
                 'camera_name': "Warehouse Camera",
                 'date': datetime.now().strftime("%Y-%m-%d"),
-                'time': "09:05:12",
+                'time': datetime.now().strftime("%H:%M:%S.%f")[:-3],
                 'timestamp': datetime.now().isoformat(),
-                'month': datetime.now().strftime("%Y-%m")
+                'month': datetime.now().strftime("%Y-%m"),
+                'people_count': 3
             }
         ]
 
@@ -257,7 +351,6 @@ def init_json_storage():
                 json.dump(sample_data, f)
             logger.info("Created new data file with sample records")
         else:
-            # If file exists but is empty, add sample data
             with open(DATA_FILE, 'r') as f:
                 try:
                     existing_data = json.load(f)
@@ -272,15 +365,16 @@ def init_json_storage():
     except Exception as e:
         logger.error(f"Failed to initialize JSON storage: {e}")
 
-def save_no_access_event(camera_name: str):
+def save_no_access_event(camera_name: str, people_count: int):
     try:
         timestamp = datetime.now()
         event = {
             'camera_name': camera_name,
             'date': timestamp.strftime("%Y-%m-%d"),
-            'time': timestamp.strftime("%H:%M:%S"),
+            'time': timestamp.strftime("%H:%M:%S.%f")[:-3],  # Millisecond precision
             'timestamp': timestamp.isoformat(),
-            'month': timestamp.strftime("%Y-%m")
+            'month': timestamp.strftime("%Y-%m"),
+            'people_count': people_count
         }
         
         with open(DATA_FILE, 'r') as f:
@@ -318,7 +412,8 @@ def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Di
             entry = {
                 'timestamp': datetime.fromisoformat(event['timestamp']),
                 'camera_name': event['camera_name'],
-                'time': event['time']
+                'time': event['time'],
+                'people_count': event['people_count']
             }
             organized_data[date].append(entry)
         
@@ -359,7 +454,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
     human_class_id = 0
     cooldown_duration = 300
     last_detection_time = 0
-    detections_table = pd.DataFrame(columns=["Camera", "Date", "Time"])
+    detections_table = pd.DataFrame(columns=["Camera", "Date", "Time", "People Count"])
 
     caps = {}
     for cam in selected_cameras:
@@ -414,11 +509,13 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                     video_placeholder.image(annotated_frame, channels="RGB", caption=cam_name)
 
                     if human_detections:
-                        save_no_access_event(cam_name)
+                        save_no_access_event(cam_name, len(human_detections))
                         timestamp = datetime.now()
-                        new_entry = pd.DataFrame([[cam_name, timestamp.strftime("%Y-%m-%d"), 
-                                                 timestamp.strftime("%H:%M:%S")]],
-                                              columns=["Camera", "Date", "Time"])
+                        new_entry = pd.DataFrame([[cam_name, 
+                                                  timestamp.strftime("%Y-%m-%d"), 
+                                                  timestamp.strftime("%H:%M:%S.%f")[:-3],
+                                                  len(human_detections)]],
+                                              columns=["Camera", "Date", "Time", "People Count"])
                         detections_table = pd.concat([detections_table, new_entry], ignore_index=True)
                         last_detection_time = current_time
                         table_placeholder.warning(f"Human detected! Cooldown for {cooldown_duration}s")
@@ -459,7 +556,7 @@ def main():
         for date, events in historical_data.items():
             st.markdown(f"**{date}**")
             df = pd.DataFrame(events)
-            df = df[['time', 'camera_name']]  # Don't show timestamp column
+            df = df[['time', 'camera_name', 'people_count']]  # Show relevant columns
             st.table(df)
     else:
         st.info("No historical data available")
