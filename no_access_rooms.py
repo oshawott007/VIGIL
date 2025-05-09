@@ -292,12 +292,9 @@
 
 
 
-
-
-import streamlit as st
 import cv2
 from ultralytics import YOLO
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 import time
 import logging
@@ -311,96 +308,144 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # JSON file for data storage
-DATA_FILE = "no_access.json"
+DATA_FILE = "no_access_events.json"
 
-def initialize_data_file():
-    """Initialize the JSON data file with sample data if it doesn't exist"""
-    sample_data = [
-        {
-            "camera_name": "Entrance Camera",
-            "date": (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "time": (datetime.now() - timedelta(days=1, hours=2)).strftime("%H:%M:%S"),
-            "timestamp": (datetime.now() - timedelta(days=1)).isoformat(),
-            "month": (datetime.now() - timedelta(days=1)).strftime("%Y-%m"),
-            "people_count": 2
-        },
-        {
-            "camera_name": "Backdoor Camera",
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "time": (datetime.now() - timedelta(hours=1)).strftime("%H:%M:%S"),
-            "timestamp": datetime.now().isoformat(),
-            "month": datetime.now().strftime("%Y-%m"),
-            "people_count": 1
+def init_json_storage():
+    """Initialize JSON storage with sample data"""
+    try:
+        if not os.path.exists(DATA_FILE):
+            sample_data = [
+                {
+                    'camera_name': "Entrance Camera",
+                    'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
+                    'time': (datetime.now() - timedelta(days=1)).strftime("%H:%M:%S"),
+                    'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
+                    'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m"),
+                    'people_count': 1
+                },
+                {
+                    'camera_name': "Warehouse Camera",
+                    'date': datetime.now().strftime("%Y-%m-%d"),
+                    'time': datetime.now().strftime("%H:%M:%S"),
+                    'timestamp': datetime.now().isoformat(),
+                    'month': datetime.now().strftime("%Y-%m"),
+                    'people_count': 2
+                }
+            ]
+            with open(DATA_FILE, 'w') as f:
+                json.dump(sample_data, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to initialize JSON storage: {e}")
+
+def save_no_access_event(camera_name: str, people_count: int):
+    """Save a new no-access event"""
+    try:
+        timestamp = datetime.now()
+        event = {
+            'camera_name': camera_name,
+            'date': timestamp.strftime("%Y-%m-%d"),
+            'time': timestamp.strftime("%H:%M:%S"),
+            'timestamp': timestamp.isoformat(),
+            'month': timestamp.strftime("%Y-%m"),
+            'people_count': people_count
         }
-    ]
-    
-    if not os.path.exists(DATA_FILE):
+        
+        # Read existing data
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r') as f:
+                data = json.load(f)
+        else:
+            data = []
+        
+        # Append new event
+        data.append(event)
+        
+        # Write back to file
         with open(DATA_FILE, 'w') as f:
-            json.dump(sample_data, f, indent=4)
-        logger.info("Created new data file with sample records")
-
-def load_all_events() -> List[dict]:
-    """Load all events from the JSON file"""
-    try:
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        initialize_data_file()
-        return []
-
-def save_event(event: dict):
-    """Save a new event to the JSON file"""
-    try:
-        events = load_all_events()
-        events.append(event)
-        with open(DATA_FILE, 'w') as f:
-            json.dump(events, f, indent=4)
+            json.dump(data, f, indent=4)
+            
         return True
     except Exception as e:
         logger.error(f"Failed to save event: {e}")
-        return False
+        return None
 
-def get_filtered_events(date_filter: str = None, month_filter: str = None) -> List[dict]:
-    """Get events filtered by date or month"""
-    events = load_all_events()
-    if date_filter:
-        return [e for e in events if e['date'] == date_filter]
-    elif month_filter:
-        return [e for e in events if e['month'] == month_filter]
-    return events
+def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
+    """Load no-access data with optional filters"""
+    try:
+        if not os.path.exists(DATA_FILE):
+            return {}
+            
+        with open(DATA_FILE, 'r') as f:
+            data = json.load(f)
+        
+        filtered_data = []
+        for event in data:
+            if date_filter and event['date'] == date_filter:
+                filtered_data.append(event)
+            elif month_filter and event['month'] == month_filter:
+                filtered_data.append(event)
+            elif not date_filter and not month_filter:
+                filtered_data.append(event)
+        
+        # Organize by date
+        organized_data = {}
+        for event in filtered_data:
+            date = event['date']
+            if date not in organized_data:
+                organized_data[date] = []
+            entry = {
+                'timestamp': datetime.fromisoformat(event['timestamp']),
+                'camera_name': event['camera_name'],
+                'time': event['time'],
+                'people_count': event['people_count']
+            }
+            organized_data[date].append(entry)
+        
+        # Sort by timestamp
+        for date in organized_data:
+            organized_data[date].sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        return organized_data
+    except Exception as e:
+        logger.error(f"Failed to load data: {e}")
+        return {}
 
-def get_unique_dates() -> List[str]:
-    """Get all unique dates from the events"""
-    events = load_all_events()
-    return sorted(list(set(e['date'] for e in events)), reverse=True)
+def get_available_dates() -> List[str]:
+    """Get all available dates with no-access events"""
+    try:
+        if not os.path.exists(DATA_FILE):
+            return []
+            
+        with open(DATA_FILE, 'r') as f:
+            data = json.load(f)
+        
+        dates = list(set(event['date'] for event in data))
+        return sorted(dates, reverse=True)
+    except Exception as e:
+        logger.error(f"Failed to get dates: {e}")
+        return []
 
-def get_unique_months() -> List[str]:
-    """Get all unique months from the events"""
-    events = load_all_events()
-    return sorted(list(set(e['month'] for e in events)), reverse=True)
-
+# Load model (cached)
 @st.cache_resource
-def load_yolo_model():
-    """Load the YOLO model"""
+def load_model():
     try:
         model = YOLO('yolov8n.onnx')
         logger.info("YOLO model loaded successfully")
         return model
     except Exception as e:
-        logger.error(f"Failed to load model: {e}")
+        logger.error(f"Failed to load model. Error: {e}")
         return None
 
-# Initialize components
-model = load_yolo_model()
-initialize_data_file()
+no_access_model = load_model()
+init_json_storage()
 
-async def detection_loop(video_placeholder, table_placeholder, selected_cameras):
-    """Main detection loop"""
+async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
+    """Main detection loop for no-access rooms"""
     confidence_threshold = 0.5
-    human_class_id = 0
-    cooldown_duration = 30  # Reduced for testing
+    human_class_id = 0  # COCO class ID for person
+    cooldown_duration = 300  # 5 minutes cooldown
     last_detection_time = 0
-    detections_df = pd.DataFrame(columns=["Camera", "Date", "Time", "People Count"])
+    detections_table = pd.DataFrame(columns=["Camera", "Date", "Time", "People Count"])
 
     # Initialize camera captures
     caps = {}
@@ -417,17 +462,17 @@ async def detection_loop(video_placeholder, table_placeholder, selected_cameras)
         return
 
     try:
-        while getattr(st.session_state, 'detection_active', False) and caps:
+        while st.session_state.no_access_detection_active and caps:
             current_time = time.time()
             
             # Cooldown handling
             if current_time - last_detection_time < cooldown_duration:
-                remaining = int(cooldown_duration - (current_time - last_detection_time))
-                table_placeholder.warning(f"Cooldown active - {remaining}s remaining")
+                remaining_time = int(cooldown_duration - (current_time - last_detection_time))
+                table_placeholder.warning(f"Cooldown active - {remaining_time}s remaining")
                 await asyncio.sleep(1)
                 continue
 
-            # Process each camera feed
+            # Process each camera
             for cam_name, cap in caps.items():
                 ret, frame = cap.read()
                 if not ret:
@@ -436,7 +481,8 @@ async def detection_loop(video_placeholder, table_placeholder, selected_cameras)
                 try:
                     # Detect humans
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = model(frame_rgb, conf=confidence_threshold)
+                    results = no_access_model(frame_rgb, conf=confidence_threshold)
+                    
                     human_detections = [
                         box for result in results 
                         for box in result.boxes 
@@ -456,36 +502,27 @@ async def detection_loop(video_placeholder, table_placeholder, selected_cameras)
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                     cv2.putText(annotated_frame, f"Camera: {cam_name}", (10, 60),
                                cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
                     video_placeholder.image(annotated_frame, channels="RGB", caption=cam_name)
 
                     # Save detection if humans found
                     if human_detections:
+                        save_no_access_event(cam_name, len(human_detections))
                         timestamp = datetime.now()
-                        event = {
-                            'camera_name': cam_name,
-                            'date': timestamp.strftime("%Y-%m-%d"),
-                            'time': timestamp.strftime("%H:%M:%S"),
-                            'timestamp': timestamp.isoformat(),
-                            'month': timestamp.strftime("%Y-%m"),
-                            'people_count': len(human_detections)
-                        }
-                        save_event(event)
-                        
-                        # Update live table
                         new_entry = pd.DataFrame([[
                             cam_name,
-                            event['date'],
-                            event['time'],
-                            event['people_count']
+                            timestamp.strftime("%Y-%m-%d"),
+                            timestamp.strftime("%H:%M:%S"),
+                            len(human_detections)
                         ]], columns=["Camera", "Date", "Time", "People Count"])
                         
-                        detections_df = pd.concat([detections_df, new_entry], ignore_index=True)
+                        detections_table = pd.concat([detections_table, new_entry], ignore_index=True)
                         last_detection_time = current_time
                         table_placeholder.warning(f"Human detected! Cooldown for {cooldown_duration}s")
 
-                    # Display live detections
-                    if not detections_df.empty:
-                        table_placeholder.dataframe(detections_df)
+                    # Update detection table
+                    if not detections_table.empty:
+                        table_placeholder.dataframe(detections_table)
 
                 except Exception as e:
                     logger.error(f"Processing error: {e}")
@@ -493,79 +530,7 @@ async def detection_loop(video_placeholder, table_placeholder, selected_cameras)
             await asyncio.sleep(0.1)
 
     finally:
+        # Clean up resources
         for cap in caps.values():
             cap.release()
         cv2.destroyAllWindows()
-
-def display_historical_data():
-    """Display historical detection data"""
-    st.sidebar.header("Historical Data")
-    view_option = st.sidebar.radio("View by", ["All", "Date", "Month"])
-    
-    if view_option == "Date":
-        dates = get_unique_dates()
-        selected_date = st.sidebar.selectbox("Select Date", dates)
-        events = get_filtered_events(date_filter=selected_date)
-    elif view_option == "Month":
-        months = get_unique_months()
-        selected_month = st.sidebar.selectbox("Select Month", months)
-        events = get_filtered_events(month_filter=selected_month)
-    else:
-        events = get_filtered_events()
-    
-    if events:
-        st.subheader("Detection History")
-        # Group by date for better organization
-        events_by_date = {}
-        for event in sorted(events, key=lambda x: x['timestamp'], reverse=True):
-            date = event['date']
-            if date not in events_by_date:
-                events_by_date[date] = []
-            events_by_date[date].append(event)
-        
-        for date, date_events in events_by_date.items():
-            st.markdown(f"**{date}**")
-            df = pd.DataFrame(date_events)[['time', 'camera_name', 'people_count']]
-            st.dataframe(df, hide_index=True)
-    else:
-        st.info("No detection events found")
-
-def main():
-    st.title("Restricted Area Monitoring System")
-    
-    # Initialize session state
-    if 'detection_active' not in st.session_state:
-        st.session_state.detection_active = False
-    
-    # Historical data view
-    display_historical_data()
-    
-    # Live monitoring section
-    st.sidebar.header("Live Monitoring")
-    cameras = [
-        {"name": "Webcam", "address": 0},
-        {"name": "IP Camera", "address": "rtsp://example.com/stream"}
-    ]
-    
-    selected_cameras = st.sidebar.multiselect(
-        "Select Cameras",
-        [cam["name"] for cam in cameras],
-        default=[cameras[0]["name"]]
-    )
-    
-    selected_cameras = [cam for cam in cameras if cam["name"] in selected_cameras]
-    
-    # Start/stop buttons
-    col1, col2 = st.sidebar.columns(2)
-    if col1.button("Start Monitoring") and selected_cameras:
-        st.session_state.detection_active = True
-        video_placeholder = st.empty()
-        table_placeholder = st.empty()
-        asyncio.run(detection_loop(video_placeholder, table_placeholder, selected_cameras))
-    
-    if col2.button("Stop Monitoring"):
-        st.session_state.detection_active = False
-        st.rerun()
-
-if __name__ == "__main__":
-    main()
