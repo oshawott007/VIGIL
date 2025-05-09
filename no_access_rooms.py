@@ -291,10 +291,9 @@
 
 
 
-
 import cv2
 from ultralytics import YOLO
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import time
 import logging
@@ -309,6 +308,9 @@ logger = logging.getLogger(__name__)
 
 # JSON file for data storage
 DATA_FILE = "no_access.json"
+
+# Global model variable with lazy loading
+_no_access_model = None
 
 def init_json_storage():
     """Initialize JSON storage with sample data"""
@@ -336,6 +338,18 @@ def init_json_storage():
                 json.dump(sample_data, f, indent=4)
     except Exception as e:
         logger.error(f"Failed to initialize JSON storage: {e}")
+
+def get_model():
+    """Lazy load and return the YOLO model"""
+    global _no_access_model
+    if _no_access_model is None:
+        try:
+            _no_access_model = YOLO('yolov8n.onnx')
+            logger.info("YOLO model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load model. Error: {e}")
+            _no_access_model = None
+    return _no_access_model
 
 def save_no_access_event(camera_name: str, people_count: int):
     """Save a new no-access event"""
@@ -425,18 +439,7 @@ def get_available_dates() -> List[str]:
         logger.error(f"Failed to get dates: {e}")
         return []
 
-# Load model (cached)
-@st.cache_resource
-def load_model():
-    try:
-        model = YOLO('yolov8n.onnx')
-        logger.info("YOLO model loaded successfully")
-        return model
-    except Exception as e:
-        logger.error(f"Failed to load model. Error: {e}")
-        return None
-
-no_access_model = load_model()
+# Initialize components
 init_json_storage()
 
 async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
@@ -446,6 +449,12 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
     cooldown_duration = 300  # 5 minutes cooldown
     last_detection_time = 0
     detections_table = pd.DataFrame(columns=["Camera", "Date", "Time", "People Count"])
+
+    # Get the model
+    model = get_model()
+    if model is None:
+        video_placeholder.error("Failed to load detection model")
+        return
 
     # Initialize camera captures
     caps = {}
@@ -481,7 +490,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                 try:
                     # Detect humans
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = no_access_model(frame_rgb, conf=confidence_threshold)
+                    results = model(frame_rgb, conf=confidence_threshold)
                     
                     human_detections = [
                         box for result in results 
