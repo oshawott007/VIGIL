@@ -289,7 +289,6 @@
 
 
 
-
 import cv2
 from ultralytics import YOLO
 from datetime import datetime, timedelta
@@ -305,45 +304,59 @@ from typing import Dict, List
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# JSON file for data storage
-DATA_FILE = "no_access.json"
-MODEL_FILE = "yolov8n.onnx"  # Ensure this matches your model filename
+# File paths
+DATA_FILE = os.path.join(os.path.dirname(__file__), "no_access.json")
+MODEL_FILE = os.path.join(os.path.dirname(__file__), "yolov8n.onnx")
 
 # Global model variable
 _no_access_model = None
 
 def init_json_storage():
-    """Initialize JSON storage with sample data"""
+    """Initialize JSON storage with sample data if empty"""
     try:
         if not os.path.exists(DATA_FILE):
             sample_data = [
                 {
                     'camera_name': "Entrance Camera",
                     'date': (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d"),
-                    'time': (datetime.now() - timedelta(days=1)).strftime("%H:%M:%S"),
+                    'time': (datetime.now() - timedelta(hours=2)).strftime("%H:%M:%S"),
                     'timestamp': (datetime.now() - timedelta(days=1)).isoformat(),
                     'month': (datetime.now() - timedelta(days=1)).strftime("%Y-%m"),
                     'people_count': 1
+                },
+                {
+                    'camera_name': "Warehouse Camera",
+                    'date': datetime.now().strftime("%Y-%m-%d"),
+                    'time': (datetime.now() - timedelta(hours=1)).strftime("%H:%M:%S"),
+                    'timestamp': datetime.now().isoformat(),
+                    'month': datetime.now().strftime("%Y-%m"),
+                    'people_count': 2
                 }
             ]
             with open(DATA_FILE, 'w') as f:
                 json.dump(sample_data, f, indent=4)
+            logger.info("Created new data file with sample records")
+        
+        # Verify data file is not corrupted
+        with open(DATA_FILE, 'r') as f:
+            json.load(f)
+            
     except Exception as e:
         logger.error(f"Failed to initialize JSON storage: {e}")
+        raise
 
 def load_model():
-    """Load the YOLO model with proper error handling"""
+    """Load YOLO model with error handling"""
     global _no_access_model
     if _no_access_model is None:
         try:
-            # Check if model file exists
             if not os.path.exists(MODEL_FILE):
-                logger.error(f"Model file not found at: {os.path.abspath(MODEL_FILE)}")
+                logger.error(f"Model file not found at: {MODEL_FILE}")
                 return None
-            
-            logger.info(f"Loading model from: {os.path.abspath(MODEL_FILE)}")
+                
+            logger.info(f"Loading model from: {MODEL_FILE}")
             _no_access_model = YOLO(MODEL_FILE)
-            logger.info("YOLO model loaded successfully")
+            logger.info("Model loaded successfully")
             return _no_access_model
         except Exception as e:
             logger.error(f"Failed to load model: {str(e)}")
@@ -363,13 +376,20 @@ def save_no_access_event(camera_name: str, people_count: int):
             'people_count': people_count
         }
         
+        # Read existing data
         existing_data = []
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, 'r') as f:
-                existing_data = json.load(f)
+            try:
+                with open(DATA_FILE, 'r') as f:
+                    existing_data = json.load(f)
+            except json.JSONDecodeError:
+                logger.warning("Data file corrupted, initializing new data")
+                existing_data = []
         
+        # Add new event
         existing_data.append(event)
         
+        # Write back to file
         with open(DATA_FILE, 'w') as f:
             json.dump(existing_data, f, indent=4)
             
@@ -378,11 +398,11 @@ def save_no_access_event(camera_name: str, people_count: int):
         logger.error(f"Failed to save event: {e}")
         return False
 
-def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Dict[str, List[dict]]:
-    """Load detection data with optional filters"""
+def load_no_access_data(date_filter: str = None, month_filter: str = None) -> List[dict]:
+    """Load detection data with filtering"""
     try:
         if not os.path.exists(DATA_FILE):
-            return {}
+            return []
             
         with open(DATA_FILE, 'r') as f:
             data = json.load(f)
@@ -396,43 +416,38 @@ def load_no_access_data(date_filter: str = None, month_filter: str = None) -> Di
             elif not date_filter and not month_filter:
                 filtered_data.append(event)
         
-        organized_data = {}
+        # Convert to list of dicts with consistent format
+        result = []
         for event in filtered_data:
-            date = event['date']
-            if date not in organized_data:
-                organized_data[date] = []
-            organized_data[date].append({
-                'timestamp': datetime.fromisoformat(event['timestamp']),
+            result.append({
                 'camera_name': event['camera_name'],
+                'date': event['date'],
                 'time': event['time'],
-                'people_count': event['people_count']
+                'people_count': event['people_count'],
+                'timestamp': event['timestamp']
             })
         
-        for date in organized_data:
-            organized_data[date].sort(key=lambda x: x['timestamp'], reverse=True)
+        # Sort by timestamp (newest first)
+        result.sort(key=lambda x: x['timestamp'], reverse=True)
         
-        return organized_data
+        return result
     except Exception as e:
         logger.error(f"Failed to load data: {e}")
-        return {}
+        return []
 
 def get_available_dates() -> List[str]:
-    """Get list of dates with detection events"""
+    """Get sorted list of unique dates with events"""
     try:
-        if not os.path.exists(DATA_FILE):
-            return []
-            
-        with open(DATA_FILE, 'r') as f:
-            data = json.load(f)
-        
-        return sorted(list(set(event['date'] for event in data)), reverse=True)
+        data = load_no_access_data()
+        dates = list({event['date'] for event in data})
+        return sorted(dates, reverse=True)
     except Exception as e:
         logger.error(f"Failed to get dates: {e}")
         return []
 
-# Initialize components
+# Initialize components when module loads
 init_json_storage()
-no_access_model = load_model()  # This makes the model available when imported
+no_access_model = load_model()
 
 async def no_access_detection_loop(video_placeholder, table_placeholder, selected_cameras):
     """Main detection processing loop"""
@@ -441,16 +456,20 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
         return
 
     confidence = 0.5
-    cooldown = 300
+    cooldown = 30  # seconds for testing (originally 300)
     last_detection = 0
     detections = pd.DataFrame(columns=["Camera", "Date", "Time", "People Count"])
 
+    # Initialize cameras
     caps = {}
     for cam in selected_cameras:
         try:
             cap = cv2.VideoCapture(cam['address'])
             if cap.isOpened():
                 caps[cam['name']] = cap
+                logger.info(f"Camera {cam['name']} initialized")
+            else:
+                logger.error(f"Failed to open camera {cam['name']}")
         except Exception as e:
             logger.error(f"Camera {cam['name']} error: {e}")
 
@@ -462,18 +481,22 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
         while getattr(st.session_state, 'no_access_detection_active', False) and caps:
             current_time = time.time()
             
+            # Handle cooldown period
             if current_time - last_detection < cooldown:
                 remaining = int(cooldown - (current_time - last_detection))
                 table_placeholder.warning(f"Cooldown active - {remaining}s remaining")
                 await asyncio.sleep(1)
                 continue
 
+            # Process each camera feed
             for cam_name, cap in caps.items():
                 ret, frame = cap.read()
                 if not ret:
+                    logger.warning(f"No frame from {cam_name}")
                     continue
 
                 try:
+                    # Detect people
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     results = no_access_model(frame_rgb, conf=confidence)
                     
@@ -483,6 +506,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                         if int(box.cls) == 0 and float(box.conf) >= confidence
                     ]
 
+                    # Annotate frame
                     annotated = frame_rgb.copy()
                     for box in people:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -490,13 +514,16 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                         cv2.putText(annotated, f"Person {float(box.conf):.2f}", 
                                   (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+                    # Add overlay text
                     cv2.putText(annotated, f"Count: {len(people)}", (10, 30),
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                     cv2.putText(annotated, f"Camera: {cam_name}", (10, 60),
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
+                    # Display video feed
                     video_placeholder.image(annotated, channels="RGB", caption=cam_name)
 
+                    # Save and display detection if people found
                     if people:
                         save_no_access_event(cam_name, len(people))
                         timestamp = datetime.now()
@@ -511,6 +538,7 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
                         last_detection = current_time
                         table_placeholder.warning(f"Detection! Cooldown for {cooldown}s")
 
+                    # Update detection table
                     if not detections.empty:
                         table_placeholder.dataframe(detections)
 
@@ -520,7 +548,8 @@ async def no_access_detection_loop(video_placeholder, table_placeholder, selecte
             await asyncio.sleep(0.1)
 
     finally:
+        # Clean up resources
         for cap in caps.values():
             cap.release()
         cv2.destroyAllWindows()
-
+        logger.info("Detection loop ended")
